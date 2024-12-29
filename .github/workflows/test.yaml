@@ -45,4 +45,13 @@ jobs:
           echo "The selected color is $SELECTED_COLOR"
           echo "Built at $BUILD_TIME"
           echo "### Hello world! :rocket:" >> $GITHUB_STEP_SUMMARY
-
+      - shell: bash
+        run: |
+          expr 3 + 7 > math-homework.txt
+      - name: Upload math result for job 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: homework_pre
+          path: math-homework.txt
+          retention-days: 1
+          compression-level: 0
