@@ -16,8 +16,11 @@ on:
         - warning
         - debug
 
+# https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions
+
 jobs:
-  build:
+  build_job:
+    name: Build Job
     runs-on: ubuntu-latest
     steps:
       - name: hello
@@ -27,5 +30,9 @@ jobs:
         run: |
           echo hello
           echo $LOG_LEVEL
+          echo "::debug::Log Level $LOG_LEVEL"
+          echo "::notice file=.github/workflows/test.yaml,line=33,title=Notice Title $LOG_LEVEL::Log Level $LOG_LEVEL"
+          echo "::warning file=.github/workflows/test.yaml,line=33,title=Notice Title $LOG_LEVEL::Log Level $LOG_LEVEL"
+          echo "::error file=.github/workflows/test.yaml,line=33,title=Notice Title $LOG_LEVEL::Log Level $LOG_LEVEL"
           echo $EVENT_CONTEXT
 
