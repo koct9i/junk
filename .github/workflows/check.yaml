@@ -52,3 +52,18 @@ jobs:
                 text: "No issues found in the codebase.",
               }
             });
+
+      - name: Add commit status
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: "success",
+              target_url: "http://github.com/koct9i",
+              description: "Hello status http://github.com",
+              context: "context string",
+            });
