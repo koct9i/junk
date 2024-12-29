@@ -1,0 +1,51 @@
+name: Update GitHub Checks Example
+
+on:
+  push: {}
+  workflow_dispatch: {}
+
+jobs:
+  update-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create a GitHub check run
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const checkRun = await github.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: "Custom Check",
+              head_sha: context.sha,
+              status: "in_progress",
+              started_at: new Date().toISOString()
+            });
+
+            core.setOutput("check_run_id", checkRun.data.id);
+
+      - name: Run some tests
+        run: |
+          echo "Running tests..."
+          # Simulate test process
+          echo "All tests passed successfully."
+
+      - name: Update the GitHub check run
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const checkRunId = "${{ steps.create.outputs.check_run_id }}";
+            await github.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: checkRunId,
+              conclusion: "success",
+              completed_at: new Date().toISOString(),
+              output: {
+                title: "Test Results",
+                summary: "All tests passed successfully!",
+                text: "No issues found in the codebase.",
+              }
+            });
