@@ -4,9 +4,28 @@ name: Test
 on:
   push: {}
 
+  workflow_dispatch:
+    inputs:
+      log_level:
+        description: 'Log Level'
+        required: true
+        default: 'warning'
+        type: choice
+        options:
+        - info
+        - warning
+        - debug
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: hello
-        run: echo hello
+        env:
+          EVENT_CONTEXT: ${{ toJSON(github.event) }}
+          LOG_LEVEL: ${{ inputs.log_level }}
+        run: |
+          echo hello
+          echo $LOG_LEVEL
+          echo $EVENT_CONTEXT
+
