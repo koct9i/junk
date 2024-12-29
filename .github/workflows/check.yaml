@@ -36,6 +36,7 @@ jobs:
       - name: Update the GitHub check run
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const checkRunId = "${{ steps.create.outputs.check_run_id }}";
             await github.checks.update({
