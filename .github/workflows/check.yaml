@@ -15,6 +15,7 @@ jobs:
         id: create
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const checkRun = await github.checks.create({
               owner: context.repo.owner,
