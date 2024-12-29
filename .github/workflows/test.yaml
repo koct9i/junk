@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: hello
+        id: hello-step
         env:
           EVENT_CONTEXT: ${{ toJSON(github.event) }}
           LOG_LEVEL: ${{ inputs.log_level }}
@@ -35,4 +36,13 @@ jobs:
           echo "::warning file=.github/workflows/test.yaml,line=33,title=Notice Title $LOG_LEVEL::Log Level $LOG_LEVEL"
           echo "::error file=.github/workflows/test.yaml,line=33,title=Notice Title $LOG_LEVEL::Log Level $LOG_LEVEL"
           echo $EVENT_CONTEXT
+          echo "BUILD_TIME=$(date +'%T')" >> $GITHUB_ENV
+          echo "SELECTED_COLOR=green" >> "$GITHUB_OUTPUT"
+      - name: done
+        env:
+          SELECTED_COLOR: ${{ steps.hello-step.outputs.SELECTED_COLOR }}
+        run: |
+          echo "The selected color is $SELECTED_COLOR"
+          echo "Built at $BUILD_TIME"
+          echo "### Hello world! :rocket:" >> $GITHUB_STEP_SUMMARY
 
