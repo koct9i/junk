@@ -17,7 +17,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const checkRun = await github.checks.create({
+            const checkRun = await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               name: "Custom Check",
@@ -40,7 +40,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const checkRunId = "${{ steps.create.outputs.check_run_id }}";
-            await github.checks.update({
+            await github.rest.checks.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
               check_run_id: checkRunId,
