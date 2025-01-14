@@ -17,6 +17,7 @@ on:
         - debug
 
 # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions
+# https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-and-highlighting-code-blocks
 
 jobs:
   build_job:
@@ -45,8 +46,8 @@ jobs:
           echo "The selected color is $SELECTED_COLOR"
           echo "Built at $BUILD_TIME"
           echo "### Hello world! :rocket:" >> $GITHUB_STEP_SUMMARY
-          echo "`code line`" >> $GITHUB_STEP_SUMMARY
-          printf "```\ncode block\ncode block\n```\n" >> $GITHUB_STEP_SUMMARY
+          echo '`code line`' >> $GITHUB_STEP_SUMMARY
+          printf '```\ncode block\ncode block\n```\n' >> $GITHUB_STEP_SUMMARY
       - shell: bash
         run: |
           expr 3 + 7 > math-homework.txt
