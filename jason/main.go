@@ -12,16 +12,19 @@ import (
 	"github.com/dave/jennifer/jen"
 )
 
+// https://json-schema.org/specification
+// https://json-schema.org/draft/2020-12/json-schema-core
+
 type SchemaEntry struct {
-	Schema    Schema
+	Schema  Schema
 	BaseURL string
 }
 
-type SchemaCache struct {
+type SchemaRegistry struct {
 	Enties map[string]*SchemaEntry
 }
 
-func (cache *SchemaCache) Lookup(reference, base string) (*SchemaEntry, error) {
+func (cache *SchemaRegistry) Lookup(reference, base string) (*SchemaEntry, error) {
 	ref, err := url.Parse(reference)
 	if err != nil {
 		return nil, err
@@ -32,7 +35,7 @@ func (cache *SchemaCache) Lookup(reference, base string) (*SchemaEntry, error) {
 		if err != nil {
 			return nil, err
 		}
-		ref := b.ResolveReference(ref)
+		ref = b.ResolveReference(ref)
 	}
 
 	resolvedReference := ref.String()
@@ -119,11 +122,11 @@ func Generate(entry *SchemaEntry) (string, error) {
 }
 
 func main() {
-	s, err := Load("../json-schema-spec/schema.json")
+	s, err := Load("json-schema-spec/schema.json")
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%+v\n\n", s.Schema)
+	// fmt.Printf("%+v\n\n", s.Schema)
 	code, err := Generate(s)
 	if err != nil {
 		log.Fatal(err)
