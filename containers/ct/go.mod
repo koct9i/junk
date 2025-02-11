@@ -1,4 +1,4 @@
-module github.com/koct9i/junk/containers/cri
+module github.com/koct9i/junk/containers/ct
 
 go 1.23.0
 
@@ -9,6 +9,7 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.2.0
 	github.com/sirupsen/logrus v1.9.3
+	github.com/urfave/cli/v3 v3.0.0-beta1
 	google.golang.org/grpc v1.69.2
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/cri-api v0.32.0

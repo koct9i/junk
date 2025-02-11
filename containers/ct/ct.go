@@ -16,6 +16,8 @@ import (
 	// "golang.org/x/mod/semver"
 	// "golang.org/x/sys/unix"
 
+	"github.com/urfave/cli/v3"
+
 	"github.com/bombsimon/logrusr/v4"
 	"github.com/go-logr/logr"
 	"github.com/sirupsen/logrus"
@@ -31,8 +33,7 @@ import (
 )
 
 var (
-	verbosity = flag.Int("verbosity", 0, "logging verbosity level")
-	address   = flag.String("address", "unix:///run/containerd/containerd.sock", "CRI endpoint")
+	address = flag.String("address", "unix:///run/containerd/containerd.sock", "CRI endpoint")
 )
 
 func grpcLogger(logger logr.Logger) grpclogging.Logger {
@@ -92,7 +93,7 @@ func format(data any) string {
 	return string(text)
 }
 
-func main() {
+func mainx() {
 	flag.Parse()
 
 	var logger logr.Logger
@@ -102,7 +103,7 @@ func main() {
 			TimestampFormat: time.DateTime,
 			FullTimestamp:   true,
 		})
-		log.SetLevel(logrus.Level(int(logrus.InfoLevel) + *verbosity))
+		log.SetLevel(logrus.Level(int(logrus.InfoLevel)))
 		logger = logrusr.New(log)
 	}
 
@@ -185,7 +186,7 @@ func main() {
 			&cri.Mount{
 				ContainerPath: "/dev/shm",
 				HostPath:      "/dev/shm/test",
-				Propagation: cri.MountPropagation_PROPAGATION_PRIVATE,
+				Propagation:   cri.MountPropagation_PROPAGATION_PRIVATE,
 			},
 		},
 		Linux: &cri.LinuxContainerConfig{
@@ -239,5 +240,182 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Print("Result", format(rsp))
+	}
+}
+
+type ContainerCLI struct {
+	Command *cli.Command
+
+	Verbosity int
+
+	RuntimeAddress string
+
+	ImageAddress string
+	Logger       logr.Logger
+	Client       Client
+
+	PodSandboxConfig	*cri.PodSandboxConfig
+	ContianerConfig 	*cri.ContainerConfig
+}
+
+func (c *ContainerCLI) Connect() error {
+	{
+		log := logrus.StandardLogger()
+		log.SetFormatter(&logrus.TextFormatter{
+			TimestampFormat: time.DateTime,
+			FullTimestamp:   true,
+		})
+		log.SetLevel(logrus.Level(int(logrus.InfoLevel) + c.Verbosity))
+		c.Logger = logrusr.New(log)
+	}
+
+	var err error
+	c.Client, err = newClient(c.Logger, c.RuntimeAddress)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func NewContainerCLI() *ContainerCLI {
+	c := &ContainerCLI{}
+
+	c.Command = &cli.Command{
+		EnableShellCompletion: true,
+
+		Flags: []cli.Flag{
+			&cli.IntFlag{
+				Name:    "verbosity",
+				Aliases: []string{"v"},
+				Value:   0,
+				Usage:   "logging verbosity `level`",
+			},
+			&cli.StringFlag{
+				Name:        "address",
+				Aliases:     []string{"a"},
+				Usage:       "CRI endpoint",
+				Value:       "unix:///run/containerd/containerd.sock",
+				Sources:     cli.EnvVars("CONTAINER_RUNTIME_ENDPOINT", "CONTAINERD_ADDRESS"),
+				Destination: &c.RuntimeAddress,
+			},
+		},
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if err := c.Connect(); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		},
+		Commands: []*cli.Command{
+			{
+				Category: "service",
+				Name:     "status",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					respose, err := c.Client.Status(ctx, &cri.StatusRequest{})
+					if err != nil {
+						return err
+					}
+					c.Logger.Info("status", "reponse", respose)
+					return nil
+				},
+			},
+		},
+	}
+
+	containerCommands := []*cli.Command{
+		{
+			Name:    "list",
+			Aliases: []string{"l", "ls"},
+			Action: func(ctx context.Context, cmd *cli.Command) error {
+				respose, err := c.Client.ListContainers(ctx, &cri.ListContainersRequest{})
+				if err != nil {
+					return err
+				}
+				for _, ct := range respose.Containers {
+					c.Logger.Info("ct", "id", ct.Id, "name", ct.Metadata.Name, "labels", ct.Labels)
+				}
+				return nil
+			},
+		},
+		{
+			Name:    "get",
+			Aliases: []string{"g"},
+			Arguments: []cli.Argument{
+				&cli.StringArg{
+					Name: "id",
+					Min:  1,
+					Max:  -1,
+				},
+			},
+			ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+				if err := c.Connect(); err != nil {
+					return
+				}
+				respose, err := c.Client.ListContainers(ctx, &cri.ListContainersRequest{})
+				if err != nil {
+					return
+				}
+				for _, ct := range respose.Containers {
+					fmt.Println(ct.Id)
+					fmt.Println(ct.Metadata.Name)
+				}
+			},
+			Action: func(ctx context.Context, cmd *cli.Command) error {
+				for _, id := range cmd.Args().Slice() {
+					respose, err := c.Client.ListContainers(ctx, &cri.ListContainersRequest{
+						Filter: &cri.ContainerFilter{
+							Id: id,
+						},
+					})
+					if err != nil {
+						return err
+					}
+					for _, ct := range respose.Containers {
+						c.Logger.Info("ct", "id", ct.Id, "name", ct.Metadata.Name)
+					}
+				}
+				return nil
+			},
+		},
+		{
+			Name:    "run",
+			Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+				c.PodSandboxConfig = &cri.PodSandboxConfig{}
+				c.ContianerConfig = &cri.ContainerConfig{}
+				return nil, nil
+			},
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name: "name",
+					Action: func(ctx context.Context, cmd *cli.Command, value string) error {
+						c.ContianerConfig.Metadata.Name = value
+						return nil
+					},
+				},
+			},
+			Action: func(ctx context.Context, cmd *cli.Command) error {
+				return nil
+			},
+		},
+	}
+
+	c.Command.Commands = append(c.Command.Commands, &cli.Command{
+		Category: "container",
+		Name:     "container",
+		Aliases:  []string{"c", "ct"},
+		Usage: "manage containers",
+		Commands: containerCommands,
+	})
+
+	return c
+}
+
+func main() {
+	containerCLI := NewContainerCLI()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	if err := containerCLI.Command.Run(ctx, os.Args); err != nil {
+		os.Exit(1)
 	}
 }
