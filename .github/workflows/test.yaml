@@ -6,6 +6,26 @@ on:
 
   workflow_dispatch:
     inputs:
+      optioan_boolean_in:
+        description: "optional boolean"
+        required: false
+        type: boolean
+      required_boolean_in:
+        description: "required boolean"
+        required: true
+        type: boolean
+      number_in:
+        description: "number input"
+        type: number
+        default: 42
+      string_in:
+        description: "string input"
+        type: string
+        default: "foo bar"
+      environment_in:
+        description: "environment input"
+        type: environment
+        required: true
       log_level:
         description: 'Log Level'
         required: true
