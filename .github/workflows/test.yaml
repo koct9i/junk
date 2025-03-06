@@ -53,6 +53,7 @@ jobs:
         id: hello-step
         run: |
           echo hello
+          sleep 15
 
   second_job:
     name: Second job
@@ -62,6 +63,7 @@ jobs:
         id: hello-step
         run: |
           echo hello
+          sleep 20
 
   build_job:
     name: Build Job
