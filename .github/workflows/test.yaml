@@ -48,6 +48,8 @@ jobs:
   first_job:
     name: First job
     runs-on: ubuntu-latest
+    concurrency:
+      group: main
     steps:
       - name: hello
         id: hello-step
@@ -59,6 +61,8 @@ jobs:
   second_job:
     name: Second job
     runs-on: ubuntu-latest
+    concurrency:
+      group: main
     steps:
       - name: hello
         id: hello-step
@@ -70,6 +74,8 @@ jobs:
   third_job:
     name: Third job
     runs-on: ubuntu-latest
+    concurrency:
+      group: main
     steps:
       - name: hello
         id: hello-step
