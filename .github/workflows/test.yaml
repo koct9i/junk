@@ -44,7 +44,21 @@ concurrency:
 # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions
 # https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-and-highlighting-code-blocks
 
+
 jobs:
+  test_matrix:
+    name: Test Matrix
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        first: [1, 2, 3, 4, 5]
+        second: [10, 20, 30, 40, 50]
+    steps:
+      - name: Matrix ${{ matrix.first }}, ${{ matrix.second }}
+        run: |
+          sleep 5
+
   first_job:
     name: First job
     runs-on: ubuntu-latest
