@@ -47,7 +47,6 @@ concurrency:
 jobs:
   do_work:
     name: Do Work
-    runs-on: ubuntu-latest
     strategy:
       max-parallel: 1
       matrix:
@@ -55,10 +54,8 @@ jobs:
         include:
           - input_flag: true
             input_value: 12
-    steps:
-      - name: do_step
-        uses: ./.github/workflows/work.yaml
-        with: ${{ matrix }}
+    uses: ./.github/workflows/work.yaml
+    with: ${{ matrix }}
 
   test_matrix:
     name: Test Matrix
