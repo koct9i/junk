@@ -44,8 +44,17 @@ concurrency:
 # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions
 # https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-and-highlighting-code-blocks
 
-
 jobs:
+  do_work:
+    name: Do Work
+    strategy:
+      max-parallel: 1
+      matrix:
+        input_flag: [false, true]
+    uses: ./.github/workflows/work.yaml
+    with:
+      input_flag: ${{ matrix.input_flag }}
+
   test_matrix:
     name: Test Matrix
     runs-on: ubuntu-latest
@@ -54,6 +63,7 @@ jobs:
       matrix:
         first: [1, 2, 3, 4, 5]
         second: [10, 20, 30, 40, 50]
+    if: "${{ false }}"
     steps:
       - name: Matrix ${{ matrix.first }}, ${{ matrix.second }}
         run: |
@@ -64,6 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: main
+    if: "${{ false }}"
     steps:
       - name: hello
         id: hello-step
@@ -77,6 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: main
+    if: "${{ false }}"
     steps:
       - name: hello
         id: hello-step
@@ -90,6 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: main
+    if: "${{ false }}"
     steps:
       - name: hello
         id: hello-step
@@ -101,6 +114,7 @@ jobs:
   build_job:
     name: Build Job
     runs-on: ubuntu-latest
+    if: "${{ false }}"
     steps:
       - name: hello
         id: hello-step
