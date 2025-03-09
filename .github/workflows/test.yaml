@@ -55,7 +55,9 @@ jobs:
           - input_flag: true
             input_value: 12
     uses: ./.github/workflows/work.yaml
-    with: ${{ matrix }}
+    with:
+      input_flag: ${{ matrix.input_flag }}
+      input_value: ${{ matrix.input_value }}
 
   test_matrix:
     name: Test Matrix
