@@ -54,9 +54,10 @@ jobs:
         include:
           - input_flag: true
             input_value: 12
-        
-    uses: ./.github/workflows/work.yaml
-    with: ${{ matrix }}
+    steps:
+      - name: do_step
+        uses: ./.github/workflows/work.yaml
+        with: ${{ matrix }}
 
   test_matrix:
     name: Test Matrix
