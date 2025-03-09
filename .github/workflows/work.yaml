@@ -2,20 +2,20 @@ name: Work
 
 on:
   workflow_call:
-    inputs:
+    inputs: &inputs
       input_flag:
         description: Input flag
         type: boolean
         required: false
         default: false
+      input_value:
+        description: Input value
+        type: number
+        required: false
+        default: 42
 
   workflow_dispatch:
-    inputs:
-      input_flag:
-        description: Input flag
-        type: boolean
-        required: false
-        default: false
+    inputs: *inputs
 
 jobs:
   do_job:
@@ -24,3 +24,4 @@ jobs:
       - name: do_step
         run: |
           echo "Flag: ${{ inputs.input_flag }}"
+          echo "Value: ${{ inputs.input_value }}"
