@@ -62,7 +62,7 @@ jobs:
             input_value: 10
     uses: ./.github/workflows/work.yaml
     with:
-      input_flag: ${{ matrix.input_flag }}
+      input_flag: ${{ matrix.input_flag || false }}
       input_value: ${{ matrix.input_value || 11 }}
 
   test_matrix:
