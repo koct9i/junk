@@ -51,6 +51,7 @@ jobs:
       max-parallel: 1
       matrix:
         input_flag: [false, true]
+        input_value: [42]
         include:
           - input_flag: true
             input_value: 12
