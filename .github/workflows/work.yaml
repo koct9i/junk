@@ -29,6 +29,7 @@ on:
 
 jobs:
   do_job:
+    name: Job ${{ inputs.input_value }} ${{ inputs.input_flag }}
     runs-on: ubuntu-latest
     steps:
       - name: do_step

@@ -53,7 +53,7 @@ jobs:
       matrix:
         name: [test]
         input_flag: [false, true]
-        input_value: [42]
+        input_value: [null]
         include:
           - name: xxx
             input_flag: true
