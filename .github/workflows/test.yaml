@@ -47,6 +47,7 @@ concurrency:
 jobs:
   do_work:
     name: Do Work
+    runs-on: ubuntu-latest
     strategy:
       max-parallel: 1
       matrix:
