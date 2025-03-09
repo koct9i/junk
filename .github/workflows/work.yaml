@@ -2,7 +2,7 @@ name: Work
 
 on:
   workflow_call:
-    inputs: &inputs
+    inputs:
       input_flag:
         description: Input flag
         type: boolean
@@ -15,7 +15,17 @@ on:
         default: 42
 
   workflow_dispatch:
-    inputs: *inputs
+    inputs:
+      input_flag:
+        description: Input flag
+        type: boolean
+        required: false
+        default: false
+      input_value:
+        description: Input value
+        type: number
+        required: false
+        default: 42
 
 jobs:
   do_job:
