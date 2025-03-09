@@ -50,7 +50,7 @@ jobs:
     name: Test Matrix
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 1
+      max-parallel: 3
       matrix:
         first: [1, 2, 3, 4, 5]
         second: [10, 20, 30, 40, 50]
