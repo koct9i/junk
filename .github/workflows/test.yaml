@@ -46,11 +46,17 @@ concurrency:
 
 jobs:
   do_work:
-    name: Do Work ${{ matrix.name }}
+    name: Do Work
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
+        first:
+          - x: 1
+          - y: 1
+        second:
+          - x: 1
+          - y: 1
         name: [test]
         input_flag: [false, true]
         input_value: [null]
@@ -60,9 +66,14 @@ jobs:
             input_value: 12
           - name: no bool
             input_value: 10
+        exclude:
+          - first:
+              x: 1
+          - second:
+              y: 1
     uses: ./.github/workflows/work.yaml
     with:
-      input_flag: ${{ matrix.input_flag || false }}
+      input_flag: ${{ matrix.input_flag }}
       input_value: ${{ matrix.input_value || 11 }}
 
   test_matrix:
