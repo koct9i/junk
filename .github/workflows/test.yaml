@@ -53,10 +53,14 @@ jobs:
       matrix:
         first:
           - x: 1
+            y: 1
           - y: 1
+            z: 1
         second:
           - x: 2
+            y: 2
           - y: 2
+            z: 2
         name: [test]
         input_flag: [false, true]
         input_value: [null]
@@ -70,7 +74,7 @@ jobs:
           - first:
               x: 1
           - second:
-              y: 2
+              z: 2
     uses: ./.github/workflows/work.yaml
     with:
       input_flag: ${{ matrix.input_flag || false }}
