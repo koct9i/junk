@@ -47,6 +47,13 @@ concurrency:
 # https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-and-highlighting-code-blocks
 
 jobs:
+  show-context:
+    steps:
+      - env:
+          EVENT_CONTEXT: ${{ toJSON(github.event) }}
+        run:
+          echo "$EVENT_CONTEXT" >>$GITHUB_STEP_SUMMARY
+
   do_work:
     name: Do Work
     strategy:
@@ -69,7 +76,7 @@ jobs:
         include:
           - name: xxx
             input_flag: true
-            input_value: 12
+    input_value: 12
           - name: no bool
             input_value: 10
         exclude:
@@ -77,6 +84,7 @@ jobs:
               x: 1
           - second:
               z: 4
+    if: "${{ false }}"
     uses: ./.github/workflows/work.yaml
     with:
       input_flag: ${{ matrix.input_flag || false }}
