@@ -76,7 +76,7 @@ jobs:
         include:
           - name: xxx
             input_flag: true
-    input_value: 12
+            input_value: 12
           - name: no bool
             input_value: 10
         exclude:
