@@ -48,6 +48,7 @@ concurrency:
 
 jobs:
   show-context:
+    runs-on: ubuntu-latest
     steps:
       - env:
           EVENT_CONTEXT: ${{ toJSON(github.event) }}
