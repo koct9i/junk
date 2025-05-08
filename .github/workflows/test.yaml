@@ -37,6 +37,8 @@ on:
         - warning
         - debug
 
+run-name: Test ${{ github.ref_type }} ${{ github.ref_name }} ${{ github.event.head_commit.timestamp }} ${{ github.sha }} on ${{ github.event_name }}
+
 concurrency:
   group: single-group
   cancel-in-progress: true
