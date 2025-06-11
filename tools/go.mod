@@ -1,12 +1,9 @@
 module github.com/koct9i/junk/tools
 
-go 1.23.1
-
-toolchain go1.23.4
+go 1.24.4
 
 require (
 	github.com/bwplotka/bingo v0.9.0
-	github.com/elastic/crd-ref-docs v0.1.0
 	github.com/fullstorydev/grpcurl v1.9.2
 	github.com/golangci/golangci-lint v1.62.2
 	github.com/mikefarah/yq/v4 v4.44.6
@@ -43,7 +40,6 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/semver/v3 v3.3.0 // indirect
-	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/OpenPeeDeeP/depguard/v2 v2.2.0 // indirect
@@ -153,7 +149,6 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
-	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.12.0 // indirect
 	github.com/jgautheron/goconst v1.7.1 // indirect
