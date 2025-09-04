@@ -67,7 +67,7 @@ jobs:
           echo "::endgroup::"
           echo "3:parent"
           echo "::endgroup::"
-          echi "4"
+          echo "4"
 
   do_work:
     name: Do Work
