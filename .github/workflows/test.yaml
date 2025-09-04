@@ -55,6 +55,20 @@ jobs:
         run:
           echo "$EVENT_CONTEXT" >>$GITHUB_STEP_SUMMARY
 
+  test-nested-groups:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "1"
+          echo "::group::parent"
+          echo "2:parent"
+          echo "::group::child"
+          echo "2:parent:child"
+          echo "::endgroup::"
+          echo "3:parent"
+          echo "::endgroup::"
+          echi "4"
+
   do_work:
     name: Do Work
     strategy:

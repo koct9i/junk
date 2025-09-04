@@ -1,6 +1,6 @@
 module github.com/koct9i/junk/tools24
 
-go 1.24.4
+go 1.24.6
 
 tool github.com/golangci/golangci-lint/cmd/golangci-lint
 
