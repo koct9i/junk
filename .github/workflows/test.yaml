@@ -63,11 +63,11 @@ jobs:
           echo "::group::parent"
           echo "2:parent"
           echo "::group::child"
-          echo "2:parent:child"
+          echo "3:parent:child"
           echo "::endgroup::"
-          echo "3:parent"
+          echo "4:parent"
           echo "::endgroup::"
-          echo "4"
+          echo "5"
 
   do_work:
     name: Do Work
