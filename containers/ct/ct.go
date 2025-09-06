@@ -340,7 +340,7 @@ func NewContainerCLI() *ContainerCLI {
 			Name:    "get",
 			Aliases: []string{"g"},
 			Arguments: []cli.Argument{
-				&cli.StringArg{
+				&cli.StringArgs{
 					Name: "id",
 					Min:  1,
 					Max:  -1,
