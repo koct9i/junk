@@ -14,7 +14,6 @@ tool github.com/dave/rebecca/cmd/becca
 
 tool golang.org/x/tools/cmd/gonew
 
-// tool golang.org/x/tools/gopls
 tool oras.land/oras/cmd/oras
 
 tool sigs.k8s.io/controller-runtime/tools/setup-envtest
