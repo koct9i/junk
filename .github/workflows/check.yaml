@@ -1,7 +1,6 @@
 name: Update GitHub Checks Example
 
 on:
-  push: {}
   workflow_dispatch: {}
 
 jobs:
