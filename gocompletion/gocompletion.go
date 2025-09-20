@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/urfave/cli/v3"
 )
@@ -410,17 +413,18 @@ func cmdWork() *cli.Command {
 
 func cmdGo() *cli.Command {
 	return &cli.Command{
-		Name:      "go",
+		Name:      "gocompletion",
 		Usage:     "shell completion for go command",
 		UsageText: "go <command> [arguments...]",
 		Description: `Go is a tool for managing Go source code.
 
 Documentation: https://pkg.go.dev/cmd/go`,
-		HideHelp: true,
+		HideHelp:              true,
 		EnableShellCompletion: true,
 		ConfigureShellCompletionCommand: func(completion *cli.Command) {
 			completion.Hidden = false
 		},
+		ShellComplete: CompleteCommandsAndFlags,
 		Commands: []*cli.Command{
 			cmdBug(),
 			cmdBuild(),
@@ -442,6 +446,85 @@ Documentation: https://pkg.go.dev/cmd/go`,
 			cmdVersion(),
 			cmdVet(),
 		},
+	}
+}
+
+func printCommandSuggestions(commands []*cli.Command, writer io.Writer) {
+	for _, command := range commands {
+		if command.Hidden {
+			continue
+		}
+		if strings.HasSuffix(os.Getenv("SHELL"), "zsh") {
+			_, _ = fmt.Fprintf(writer, "%s:%s\n", command.Name, command.Usage)
+		} else {
+			_, _ = fmt.Fprintf(writer, "%s (%s)\n", command.Name, command.Usage)
+		}
+	}
+}
+
+func printFlagSuggestions(lastArg string, flags []cli.Flag, writer io.Writer) {
+	// Trim to handle both "-short" and "--long" flags.
+	cur := strings.TrimLeft(lastArg, "-")
+	for _, flag := range flags {
+		if bflag, ok := flag.(*cli.BoolFlag); ok && bflag.Hidden {
+			continue
+		}
+
+		usage := ""
+		if docFlag, ok := flag.(cli.DocGenerationFlag); ok {
+			usage = docFlag.GetUsage()
+		}
+
+		name := strings.TrimSpace(flag.Names()[0])
+		// this will get total count utf8 letters in flag name
+		count := utf8.RuneCountInString(name)
+		if count > 2 {
+			count = 2 // reuse this count to generate single - or -- in flag completion
+		}
+		// if flag name has more than one utf8 letter and last argument in cli has -- prefix then
+		// skip flag completion for short flags example -v or -x
+		if strings.HasPrefix(lastArg, "--") && count == 1 {
+			continue
+		}
+		// match if last argument matches this flag and it is not repeated
+		if strings.HasPrefix(name, cur) && cur != name {
+			flagCompletion := fmt.Sprintf("%s%s", strings.Repeat("-", count), name)
+			if usage != "" && strings.HasSuffix(os.Getenv("SHELL"), "zsh") {
+				flagCompletion = fmt.Sprintf("%s:%s", flagCompletion, usage)
+			}
+			fmt.Fprintln(writer, flagCompletion)
+		}
+	}
+}
+
+func CompleteCommandsAndFlags(ctx context.Context, cmd *cli.Command) {
+	args := cmd.Args().Slice()
+	argsLen := len(args)
+	lastArg := ""
+	// parent command will have --generate-shell-completion so we need
+	// to account for that
+	if argsLen > 1 {
+		lastArg = args[argsLen-2]
+	} else if argsLen > 0 {
+		lastArg = args[argsLen-1]
+	}
+
+	if lastArg == "--" {
+		return
+	}
+
+	if lastArg == "--generate-shell-completion" {
+		lastArg = ""
+	}
+
+	if strings.HasPrefix(lastArg, "-") {
+		printFlagSuggestions(lastArg, cmd.Flags, cmd.Root().Writer)
+		return
+	}
+
+	if cmd != nil {
+		printCommandSuggestions(cmd.Commands, cmd.Root().Writer)
+		return
 	}
 }
 
