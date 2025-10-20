@@ -1,0 +1,4 @@
+#!/bin/bash
+# go install github.com/homeport/dyff/cmd/dyff@latest
+export KUBECTL_EXTERNAL_DIFF='dyff between --omit-header --set-exit-code'
+exec kubectl diff "$@"
