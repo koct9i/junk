@@ -2,429 +2,82 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"os"
+	"os/exec"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/urfave/cli/v3"
 )
 
-// https://pkg.go.dev/cmd/go
-// https://cs.opensource.google/go/go/+/master:src/cmd/go/alldocs.go
+const (
+	docBase = "https://pkg.go.dev/cmd/go"
 
-// buildFlags are the flags shared by build, clean, get, install, list, run, and test.
-func buildFlags() []cli.Flag {
-	return []cli.Flag{
-		&cli.StringFlag{Name: "C", Usage: "Change to 'dir' before running the command."},
-		&cli.BoolFlag{Name: "a", Usage: "Force rebuilding of packages that are already up-to-date."},
-		&cli.BoolFlag{Name: "n", Usage: "Print the commands but do not run them."},
-		&cli.IntFlag{Name: "p", Value: 0, Usage: "The number of programs that can be run in parallel."},
-		&cli.BoolFlag{Name: "race", Usage: "Enable data race detection."},
-		&cli.BoolFlag{Name: "msan", Usage: "Enable interoperation with memory sanitizer."},
-		&cli.BoolFlag{Name: "asan", Usage: "Enable interoperation with address sanitizer."},
-		&cli.BoolFlag{Name: "cover", Usage: "Enable code coverage instrumentation."},
-		&cli.StringFlag{Name: "covermode", Usage: "Coverage mode: set, count, atomic."},
-		&cli.StringSliceFlag{Name: "coverpkg", Usage: "Comma-separated patterns of packages for which to apply coverage in main builds."},
-		&cli.BoolFlag{Name: "v", Usage: "Print the names of packages as they are compiled."},
-		&cli.BoolFlag{Name: "work", Usage: "Print the name of the temporary work directory and do not delete it."},
-		&cli.BoolFlag{Name: "x", Usage: "Print the commands."},
-		&cli.StringSliceFlag{Name: "asmflags", Usage: "Arguments to pass on each 'go tool asm' invocation. Supports optional [pattern=] prefix."},
-		&cli.StringFlag{Name: "buildmode", Usage: "Build mode to use. See 'go help buildmode'."},
-		&cli.StringFlag{Name: "buildvcs", Usage: "Whether to stamp binaries with VCS info: true, false, or auto."},
-		&cli.StringFlag{Name: "compiler", Usage: "Compiler to use: gc or gccgo."},
-		&cli.StringSliceFlag{Name: "gccgoflags", Usage: "Arguments to pass on each gccgo compiler/linker invocation."},
-		&cli.StringSliceFlag{Name: "gcflags", Usage: "Arguments to pass on each 'go tool compile' invocation. Supports optional [pattern=] prefix."},
-		&cli.StringFlag{Name: "installsuffix", Usage: "Suffix to use in the package installation directory."},
-		&cli.BoolFlag{Name: "json", Usage: "Emit build output in JSON for automated processing."},
-		&cli.StringSliceFlag{Name: "ldflags", Usage: "Arguments to pass on each 'go tool link' invocation."},
-		&cli.BoolFlag{Name: "linkshared", Usage: "Build code that will be linked against shared libraries (with -buildmode=shared)."},
-		&cli.StringFlag{Name: "mod", Usage: "Module download mode: readonly, vendor, or mod."},
-		&cli.BoolFlag{Name: "modcacherw", Usage: "Leave newly-created module cache directories read-write."},
-		&cli.StringFlag{Name: "modfile", Usage: "Read (and possibly write) an alternate go.mod file."},
-		&cli.StringSliceFlag{Name: "pkgdir", Usage: "Package directories (for gccgo)."},
-		&cli.StringSliceFlag{Name: "tags", Usage: "Build tags to consider satisfied during the build."},
-		&cli.StringFlag{Name: "toolexec", Usage: "Program to use to invoke toolchain programs (e.g., compile, link)."},
-		&cli.StringFlag{Name: "trimpath", Usage: "Remove all file system paths from the resulting executable."},
-		&cli.StringFlag{Name: "toolchain", Usage: "Select the Go toolchain to use."},
-	}
+	// Flag categories
+	catGeneral   = "General"
+	catBuild     = "Build"
+	catModule    = "Modules"
+	catWorkspace = "Workspaces"
+	catTest      = "Testing"
+	catDebug     = "Debugging"
+	catOutput    = "Output"
+	catTool      = "Tooling"
+)
+
+type cmdMeta struct {
+	DocURL   string
+	ArgsDesc string
 }
 
-// listFlags are the list-specific flags (in addition to build flags).
-func listFlags() []cli.Flag {
-	return []cli.Flag{
-		&cli.BoolFlag{Name: "deps", Usage: "List dependencies of each package."},
-		&cli.StringFlag{Name: "f", Usage: "Print using a custom format."},
-		&cli.BoolFlag{Name: "find", Usage: "Show a suggestion of the package pattern, avoiding loading of packages."},
-		&cli.BoolFlag{Name: "json", Usage: "Print JSON instead of the default text format."},
-		&cli.BoolFlag{Name: "m", Usage: "List modules instead of packages."},
-		&cli.BoolFlag{Name: "test", Usage: "Include in the listing test packages imported by each package."},
-		&cli.BoolFlag{Name: "compiled", Usage: "Include the names of compiled Go files."},
-		&cli.BoolFlag{Name: "cgo", Usage: "Include the names of Cgo files."},
-		&cli.BoolFlag{Name: "e", Usage: "Show errors associated with packages."},
-		&cli.BoolFlag{Name: "export", Usage: "Include the file names for export data."},
-		&cli.StringFlag{Name: "reuse", Usage: "Read previously saved JSON from a 'go list -m -json' run (for -m)."},
-		&cli.BoolFlag{Name: "u", Usage: "When -m is set, also show available minor and patch upgrades (with -u/-versions)."},
-		&cli.BoolFlag{Name: "retracted", Usage: "When -m is set, include retracted versions."},
-		&cli.BoolFlag{Name: "versions", Usage: "When -m is set, show available versions."},
-	}
-}
+func main() {
 
-// testFlags are the test-execution flags recognized by 'go test'.
-func testFlags() []cli.Flag {
-	return []cli.Flag{
-		&cli.StringFlag{Name: "bench", Usage: "Run only those benchmarks matching the regexp."},
-		&cli.StringFlag{Name: "benchtime", Usage: "Run enough iterations of each benchmark to take the specified time (e.g., 1s, 2x)."},
-		&cli.BoolFlag{Name: "benchmem", Usage: "Print memory allocation statistics for benchmarks."},
-		&cli.IntFlag{Name: "blockprofilerate", Usage: "Control the fraction of goroutine blocking events reported in the blocking profile."},
-		&cli.StringFlag{Name: "blockprofile", Usage: "Write a goroutine blocking profile to the named file after execution."},
-		&cli.StringFlag{Name: "coverprofile", Usage: "Write a coverage profile to the named file after execution."},
-		&cli.StringFlag{Name: "cpu", Usage: "Comma-separated list of GOMAXPROCS values for which the tests should be executed."},
-		&cli.IntFlag{Name: "count", Value: 1, Usage: "Run each test and benchmark n times (0 means infinite)."},
-		&cli.BoolFlag{Name: "failfast", Usage: "Do not start new tests after the first test failure."},
-		&cli.BoolFlag{Name: "fullpath", Usage: "Show full pathnames in test output."},
-		&cli.StringFlag{Name: "list", Usage: "List tests, benchmarks, or examples matching the regexp and exit."},
-		&cli.StringFlag{Name: "memprofile", Usage: "Write a memory profile to the named file after execution."},
-		&cli.IntFlag{Name: "memprofilerate", Usage: "Enable more precise memory profiles (see runtime.MemProfileRate)."},
-		&cli.StringFlag{Name: "mutexprofile", Usage: "Write a mutex contention profile to the named file after execution."},
-		&cli.IntFlag{Name: "mutexprofilefraction", Usage: "Sample fraction of mutex contention events."},
-		&cli.StringFlag{Name: "outputdir", Usage: "Write profiles to the specified directory, leaving the test binary."},
-		&cli.IntFlag{Name: "parallel", Usage: "Maximum number of tests to run in parallel."},
-		&cli.StringFlag{Name: "run", Usage: "Run only those tests and examples matching the regexp."},
-		&cli.BoolFlag{Name: "short", Usage: "Tell long-running tests to shorten their run time."},
-		&cli.DurationFlag{Name: "timeout", Usage: "If a test runs longer than t, panic. The default is 10m."},
-		&cli.BoolFlag{Name: "trace", Usage: "Write an execution trace to the named file after execution (when used with value)."},
-		&cli.BoolFlag{Name: "v", Usage: "Verbose output: log all tests as they are run."},
-	}
-}
+	cli.CommandHelpTemplate = `NAME:
+   {{template "helpNameTemplate" .}}
 
-// ---------- Commands (no-op handlers) ----------
+USAGE:
+   {{template "usageTemplate" .}}{{if .Category}}
 
-func stubAction(ctx context.Context, command *cli.Command) error {
-	fmt.Printf("%s: not implemented\n", command.Name)
-	return nil
-}
+CATEGORY:
+   {{.Category}}{{end}}{{if .Description}}
 
-func cmdBug() *cli.Command {
-	return &cli.Command{
-		Name:   "bug",
-		Usage:  "Start a bug report",
-		Action: stubAction,
-	}
-}
+DESCRIPTION:
+   {{template "descriptionTemplate" .}}{{end}}{{if .VisibleFlagCategories}}
 
-func cmdBuild() *cli.Command {
-	return &cli.Command{
-		Name:   "build",
-		Usage:  "Compile packages and dependencies",
-		Flags:  buildFlags(),
-		Action: stubAction,
-	}
-}
+OPTIONS:{{template "visibleFlagCategoryTemplate" .}}{{else if .VisibleFlags}}
 
-func cmdClean() *cli.Command {
-	flags := append([]cli.Flag{}, buildFlags()...)
-	flags = append(flags,
-		&cli.BoolFlag{Name: "cache", Usage: "Remove all cached build and test results."},
-		&cli.BoolFlag{Name: "i", Usage: "Remove the installed packages for the named targets."},
-		&cli.BoolFlag{Name: "modcache", Usage: "Remove the entire module download cache."},
-		&cli.BoolFlag{Name: "r", Usage: "Remove obj and installed files recursively for the arguments and their dependencies."},
-		&cli.BoolFlag{Name: "testcache", Usage: "Expire all test results in the cache."},
-	)
-	return &cli.Command{
-		Name:   "clean",
-		Usage:  "Remove object files and cached files",
-		Flags:  flags,
-		Action: stubAction,
-	}
-}
+OPTIONS:{{template "visibleFlagTemplate" .}}{{end}}{{if .VisiblePersistentFlags}}
 
-func cmdDoc() *cli.Command {
-	return &cli.Command{
-		Name:  "doc",
-		Usage: "Show documentation for package or symbol",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{Name: "all", Usage: "Show documentation for all symbols, as per 'go doc -all'."},
-			&cli.StringFlag{Name: "c", Usage: "Respect case when matching symbols (-c)."}, // urfave/cli requires a value; keep present for parity
-			&cli.StringFlag{Name: "cmd", Usage: "Treat a cmd path as a package (show package docs)."},
-			&cli.BoolFlag{Name: "u", Usage: "Show documentation for unexported symbols."},
-			&cli.StringFlag{Name: "src", Usage: "Show the source code for the symbol."},
-		},
-		Action: stubAction,
-	}
-}
+GLOBAL OPTIONS:{{template "visiblePersistentFlagTemplate" .}}{{end}}
 
-func cmdEnv() *cli.Command {
-	return &cli.Command{
-		Name:  "env",
-		Usage: "Print Go environment information",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{Name: "json"},
-			&cli.BoolFlag{Name: "changed"},
-			&cli.BoolFlag{Name: "u"},
-			&cli.StringSliceFlag{Name: "w", Usage: "Set NAME=VALUE (may be repeated)."},
-		},
-		Action: stubAction,
-	}
-}
+DOCUMENTATION:
+   {{.Metadata.DocURL}}
+`
 
-func cmdFix() *cli.Command {
-	return &cli.Command{Name: "fix", Usage: "Update packages to use new APIs", Flags: []cli.Flag{
-		&cli.StringFlag{Name: "fix", Usage: "Comma-separated list of fixes to run (default all)."},
-	}, Action: stubAction}
-}
+	cli.SubcommandHelpTemplate = `NAME:
+   {{template "helpNameTemplate" .}}
 
-func cmdFmt() *cli.Command {
-	return &cli.Command{Name: "fmt", Usage: "Gofmt (reformat) package sources", Flags: []cli.Flag{
-		&cli.BoolFlag{Name: "n"},
-		&cli.BoolFlag{Name: "x"},
-	}, Action: stubAction}
-}
+USAGE:
+   {{if .UsageText}}{{wrap .UsageText 3}}{{else}}{{.FullName}}{{if .VisibleCommands}} [command [command options]]{{end}}{{if .ArgsUsage}} {{.ArgsUsage}}{{else}}{{if .Arguments}} [arguments...]{{end}}{{end}}{{end}}{{if .Category}}
 
-func cmdGenerate() *cli.Command {
-	flags := append([]cli.Flag{}, buildFlags()...)
-	flags = append(flags,
-		&cli.StringFlag{Name: "run", Usage: "Run only generators matching the regular expression"},
-		&cli.StringFlag{Name: "tags", Usage: "Build tags (also respected by generate)."},
-		&cli.BoolFlag{Name: "n", Usage: "Print commands but do not run them."},
-		&cli.BoolFlag{Name: "v", Usage: "Verbose output."},
-	)
-	return &cli.Command{Name: "generate", Usage: "Generate Go files by processing source", Flags: flags, Action: stubAction}
-}
+CATEGORY:
+   {{.Category}}{{end}}{{if .Description}}
 
-func cmdGet() *cli.Command {
-	flags := append([]cli.Flag{}, buildFlags()...)
-	flags = append(flags,
-		&cli.BoolFlag{Name: "d", Usage: "Only download; do not build or install."},
-		&cli.BoolFlag{Name: "t", Usage: "Also download test dependencies."},
-		&cli.BoolFlag{Name: "u", Usage: "Update modules providing dependencies to newer minor or patch releases; use -u=patch for patch only."},
-		&cli.StringFlag{Name: "u=patch", Usage: "Shorthand for patch-level updates only (mirror of go help get)."},
-	)
-	return &cli.Command{Name: "get", Usage: "Add dependencies to current module and install them", Flags: flags, Action: stubAction}
-}
+DESCRIPTION:
+   {{template "descriptionTemplate" .}}{{end}}{{if .VisibleCommands}}
 
-func cmdInstall() *cli.Command {
-	return &cli.Command{
-		Name:   "install",
-		Usage:  "Compile and install packages and dependencies",
-		Flags:  buildFlags(),
-		Action: stubAction,
-	}
-}
+COMMANDS:{{template "visibleCommandTemplate" .}}{{end}}{{if .VisibleFlagCategories}}
 
-func cmdList() *cli.Command {
-	flags := append([]cli.Flag{}, buildFlags()...)
-	flags = append(flags, listFlags()...)
-	return &cli.Command{
-		Name:   "list",
-		Usage:  "List packages or modules",
-		Flags:  flags,
-		Action: stubAction,
-	}
-}
+OPTIONS:{{template "visibleFlagCategoryTemplate" .}}{{else if .VisibleFlags}}
 
-func cmdRun() *cli.Command {
-	flags := append([]cli.Flag{}, buildFlags()...)
-	flags = append(flags,
-		&cli.StringFlag{Name: "exec", Usage: "Run the generated binary under xprog (like 'time')."},
-	)
-	return &cli.Command{
-		Name:   "run",
-		Usage:  "Compile and run a Go program",
-		Flags:  flags,
-		Action: stubAction,
-	}
-}
+OPTIONS:{{template "visibleFlagTemplate" .}}{{end}}
+`
 
-func cmdTelemetry() *cli.Command {
-	return &cli.Command{
-		Name:  "telemetry",
-		Usage: "Manage telemetry data and settings",
-		Commands: []*cli.Command{
-			{Name: "on", Usage: "Enable both local collection and uploading.", Action: stubAction},
-			{Name: "off", Usage: "Disable both collection and uploading.", Action: stubAction},
-			{Name: "local", Usage: "Disable uploading, keep local collection.", Action: stubAction},
-		},
-		Action: stubAction,
-	}
-}
-
-func cmdTest() *cli.Command {
-	flags := append([]cli.Flag{}, buildFlags()...)
-	flags = append(flags, testFlags()...)
-	return &cli.Command{
-		Name:   "test",
-		Usage:  "Test packages",
-		Flags:  flags,
-		Action: stubAction,
-	}
-}
-
-func cmdTool() *cli.Command {
-	return &cli.Command{
-		Name:   "tool",
-		Usage:  "Run specified go tool",
-		Action: stubAction,
-	}
-}
-
-func cmdVersion() *cli.Command {
-	return &cli.Command{
-		Name:   "version",
-		Usage:  "Print Go version",
-		Action: stubAction,
-	}
-}
-
-func cmdVet() *cli.Command {
-	flags := append([]cli.Flag{}, buildFlags()...)
-	return &cli.Command{
-		Name:   "vet",
-		Usage:  "Report likely mistakes in packages",
-		Flags:  flags,
-		Action: stubAction,
-	}
-}
-
-func cmdMod() *cli.Command {
-	return &cli.Command{
-		Name:  "mod",
-		Usage: "Module maintenance",
-		Commands: []*cli.Command{
-			{
-				Name:   "download",
-				Usage:  "Download modules to local cache",
-				Flags:  []cli.Flag{&cli.BoolFlag{Name: "x"}, &cli.BoolFlag{Name: "json"}, &cli.StringFlag{Name: "reuse"}},
-				Action: stubAction,
-			},
-			{
-				Name:  "edit",
-				Usage: "Edit go.mod from tools or scripts",
-				Flags: []cli.Flag{
-					&cli.BoolFlag{Name: "fmt"},
-					&cli.StringSliceFlag{Name: "require", Usage: "Add a requirement (path@version)."},
-					&cli.StringSliceFlag{Name: "droprequire", Usage: "Drop a requirement (path)."},
-					&cli.StringSliceFlag{Name: "exclude", Usage: "Add an exclude directive (path@version)."},
-					&cli.StringSliceFlag{Name: "dropexclude", Usage: "Drop an exclude directive (path@version)."},
-					&cli.StringSliceFlag{Name: "replace", Usage: "Add a replace directive old[@v]=new[@v]."},
-					&cli.StringSliceFlag{Name: "dropreplace", Usage: "Drop a replace directive old[@v]."},
-					&cli.StringFlag{Name: "retract", Usage: "Add a retract directive."},
-					&cli.StringFlag{Name: "dropretract", Usage: "Drop a retract directive."},
-					&cli.StringFlag{Name: "go", Usage: "Set the expected Go language version."},
-					&cli.StringFlag{Name: "toolchain", Usage: "Set the toolchain to use."},
-					&cli.BoolFlag{Name: "print"},
-					&cli.BoolFlag{Name: "json"},
-				},
-				Action: stubAction,
-			},
-			{
-				Name:   "graph",
-				Usage:  "Print module requirement graph",
-				Flags:  []cli.Flag{&cli.BoolFlag{Name: "x"}},
-				Action: stubAction,
-			},
-			{
-				Name:   "init",
-				Usage:  "Initialize new module in current directory",
-				Flags:  []cli.Flag{&cli.StringFlag{Name: "module-path", Usage: "Optional module path"}},
-				Action: stubAction,
-			},
-			{
-				Name:  "tidy",
-				Usage: "Add missing and remove unused modules",
-				Flags: []cli.Flag{
-					&cli.BoolFlag{Name: "compat", Usage: "(via -compat=) use compatibility with previous Go version (string value in go tool)."},
-					&cli.BoolFlag{Name: "e", Usage: "Report errors but proceed (best-effort)."},
-					&cli.BoolFlag{Name: "v"},
-					&cli.BoolFlag{Name: "x"},
-				},
-				Action: stubAction,
-			},
-			{
-				Name:   "vendor",
-				Usage:  "Make vendored copy of dependencies",
-				Flags:  []cli.Flag{&cli.BoolFlag{Name: "e"}, &cli.BoolFlag{Name: "v"}, &cli.StringFlag{Name: "o", Usage: "Output directory"}},
-				Action: stubAction,
-			},
-			{
-				Name:   "verify",
-				Usage:  "Verify dependencies have expected content",
-				Action: stubAction,
-			},
-			{
-				Name:   "why",
-				Usage:  "Explain why packages or modules are needed",
-				Flags:  []cli.Flag{&cli.BoolFlag{Name: "m"}, &cli.BoolFlag{Name: "vendor"}},
-				Action: stubAction,
-			},
-		},
-	}
-}
-
-func cmdWork() *cli.Command {
-	return &cli.Command{
-		Name:  "work",
-		Usage: "Workspace maintenance",
-		Commands: []*cli.Command{
-			{
-				Name:  "edit",
-				Usage: "Edit go.work from tools or scripts",
-				Flags: []cli.Flag{
-					&cli.BoolFlag{Name: "fmt"},
-					&cli.StringSliceFlag{Name: "godebug", Usage: "Add godebug key=value (may repeat)."},
-					&cli.StringSliceFlag{Name: "dropgodebug", Usage: "Drop godebug key."},
-					&cli.StringSliceFlag{Name: "use", Usage: "Add use=path directive (may repeat)."},
-					&cli.StringSliceFlag{Name: "dropuse", Usage: "Drop use=path directive (may repeat)."},
-					&cli.StringSliceFlag{Name: "replace", Usage: "Add replace old[@v]=new[@v]."},
-					&cli.StringSliceFlag{Name: "dropreplace", Usage: "Drop replace old[@v]."},
-					&cli.StringFlag{Name: "go", Usage: "Set expected Go language version."},
-					&cli.StringFlag{Name: "toolchain", Usage: "Set toolchain name."},
-					&cli.BoolFlag{Name: "print"},
-					&cli.BoolFlag{Name: "json"},
-				},
-				Action: stubAction,
-			},
-			{
-				Name:   "init",
-				Usage:  "Initialize workspace file",
-				Action: stubAction,
-			},
-			{
-				Name:   "sync",
-				Usage:  "Sync workspace build list to modules",
-				Action: stubAction,
-			},
-			{
-				Name:   "use",
-				Usage:  "Add modules to workspace file",
-				Flags:  []cli.Flag{&cli.BoolFlag{Name: "r", Usage: "Search directories recursively."}},
-				Action: stubAction,
-			},
-			{
-				Name:   "vendor",
-				Usage:  "Make vendored copy of dependencies",
-				Flags:  []cli.Flag{&cli.BoolFlag{Name: "e"}, &cli.BoolFlag{Name: "v"}, &cli.StringFlag{Name: "o", Usage: "Output directory"}},
-				Action: stubAction,
-			},
-		},
-	}
-}
-
-func cmdGo() *cli.Command {
-	return &cli.Command{
-		Name:      "gocompletion",
-		Usage:     "shell completion for go command",
-		UsageText: "go <command> [arguments...]",
-		Description: `Go is a tool for managing Go source code.
-
-Documentation: https://pkg.go.dev/cmd/go`,
-		HideHelp:              true,
-		EnableShellCompletion: true,
-		ConfigureShellCompletionCommand: func(completion *cli.Command) {
-			completion.Hidden = false
-		},
-		ShellComplete: CompleteCommandsAndFlags,
+	root := &cli.Command{
+		Name:      "go",
+		Usage:     "Go is a tool for managing Go source code.",
+		ArgsUsage: "[arguments]",
+		Description: "Docs: " + docBase + "\n\n" +
+			"This wrapper defines commands/flags/args for help/validation, but execution is transparent:\n" +
+			"it always runs the system `go` with the original argv.\n",
 		Commands: []*cli.Command{
 			cmdBug(),
 			cmdBuild(),
@@ -435,6 +88,7 @@ Documentation: https://pkg.go.dev/cmd/go`,
 			cmdFmt(),
 			cmdGenerate(),
 			cmdGet(),
+			cmdHelp(),
 			cmdInstall(),
 			cmdList(),
 			cmdMod(),
@@ -446,93 +100,738 @@ Documentation: https://pkg.go.dev/cmd/go`,
 			cmdVersion(),
 			cmdVet(),
 		},
+		Action: execGo,
+	}
+
+	_ = root.Run(context.Background(), os.Args)
+}
+
+// Executes the system `go` with the original argv exactly as provided.
+func execGo(ctx context.Context, _ *cli.Command) error {
+	args := os.Args[1:]
+	c := exec.CommandContext(ctx, "go", args...)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+
+	if err := c.Run(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return cli.Exit("", ee.ExitCode())
+		}
+		return err
+	}
+	return nil
+}
+
+func hdrAnchor(h string) string {
+	return docBase + "#hdr-" + strings.ReplaceAll(h, " ", "_")
+}
+
+func cmdInfo(name string) cmdMeta {
+	m := map[string]cmdMeta{
+		"bug":       {DocURL: hdrAnchor("Start_a_bug_report"), ArgsDesc: "No arguments."},
+		"build":     {DocURL: hdrAnchor("Compile_packages_and_dependencies"), ArgsDesc: "`packages` are import paths, directories, or patterns like `./...`. `.go` files from one directory are treated as one package."},
+		"clean":     {DocURL: hdrAnchor("Remove_object_files_and_cached_files"), ArgsDesc: "`packages` are import paths/patterns like `fmt`, `./...`."},
+		"doc":       {DocURL: hdrAnchor("Show_documentation_for_package_or_symbol"), ArgsDesc: "`query` is `package` or `[package.]symbol[.methodOrField]` (e.g. `fmt.Println`)."},
+		"env":       {DocURL: hdrAnchor("Print_Go_environment_information"), ArgsDesc: "`var` are environment variable names (e.g. `GOPATH`). If omitted, prints many variables."},
+		"fix":       {DocURL: hdrAnchor("Update_packages_to_use_new_APIs"), ArgsDesc: "`packages` are import paths/patterns."},
+		"fmt":       {DocURL: hdrAnchor("Gofmt_(reformat)_package_sources"), ArgsDesc: "`packages` are import paths/patterns."},
+		"generate":  {DocURL: hdrAnchor("Generate_Go_files_by_processing_source"), ArgsDesc: "`targets` are `.go` files or package patterns/import paths."},
+		"get":       {DocURL: hdrAnchor("Add_dependencies_to_current_module_and_install_them"), ArgsDesc: "`packages` are package queries, optionally with `@version`."},
+		"install":   {DocURL: hdrAnchor("Compile_and_install_packages_and_dependencies"), ArgsDesc: "`packages` are import paths/patterns (often commands)."},
+		"help":      {DocURL: docBase, ArgsDesc: ""},
+		"list":      {DocURL: hdrAnchor("List_packages_or_modules"), ArgsDesc: "`targets` are packages; with `-m`, modules."},
+		"mod":       {DocURL: hdrAnchor("Module_maintenance"), ArgsDesc: "`command` selects a module subcommand; remaining args are subcommand args."},
+		"work":      {DocURL: hdrAnchor("Workspace_maintenance"), ArgsDesc: "`command` selects a workspace subcommand; remaining args are subcommand args."},
+		"run":       {DocURL: hdrAnchor("Compile_and_run_Go_program"), ArgsDesc: "`package` is import path/dir/pattern or `.go` files (single-dir). `arguments` go to the program."},
+		"telemetry": {DocURL: hdrAnchor("Manage_telemetry_data_and_settings"), ArgsDesc: "Optional setting: `off`, `local`, or `on`."},
+		"test":      {DocURL: hdrAnchor("Test_packages"), ArgsDesc: "`packages` are import paths/patterns; none means local directory mode. Testing flags: " + hdrAnchor("Testing_flags")},
+		"tool":      {DocURL: hdrAnchor("Run_specified_go_tool"), ArgsDesc: "`command` is tool name; remaining `args` passed to it. No args lists tools."},
+		"version":   {DocURL: hdrAnchor("Print_Go_version"), ArgsDesc: "`file` are Go binaries to inspect; none prints `go`'s own version."},
+		"vet":       {DocURL: hdrAnchor("Report_likely_mistakes_in_packages"), ArgsDesc: "`packages` are import paths/patterns."},
+
+		"mod download": {DocURL: hdrAnchor("Download_modules_to_local_cache"), ArgsDesc: "`modules` are patterns/queries like `all` or `path@version`."},
+		"mod edit":     {DocURL: hdrAnchor("Edit_go.mod_from_tools_or_scripts"), ArgsDesc: "Optional `go.mod` path."},
+		"mod graph":    {DocURL: hdrAnchor("Print_module_requirement_graph"), ArgsDesc: "No arguments."},
+		"mod init":     {DocURL: hdrAnchor("Initialize_new_module_in_current_directory"), ArgsDesc: "Optional `module-path`."},
+		"mod tidy":     {DocURL: hdrAnchor("Add_missing_and_remove_unused_modules"), ArgsDesc: "No arguments."},
+		"mod vendor":   {DocURL: hdrAnchor("Make_vendored_copy_of_dependencies"), ArgsDesc: "No arguments."},
+		"mod verify":   {DocURL: hdrAnchor("Verify_dependencies_have_expected_content"), ArgsDesc: "No arguments."},
+		"mod why":      {DocURL: hdrAnchor("Explain_why_packages_or_modules_are_needed"), ArgsDesc: "`packages` are import paths/patterns (with `-m`, modules)."},
+
+		"work edit":   {DocURL: hdrAnchor("Edit_go.work_from_tools_or_scripts"), ArgsDesc: "Optional `go.work` path."},
+		"work init":   {DocURL: hdrAnchor("Initialize_workspace_file"), ArgsDesc: "`moddirs` are module directories to add as use directives."},
+		"work sync":   {DocURL: hdrAnchor("Sync_workspace_build_list_to_modules"), ArgsDesc: "No arguments."},
+		"work use":    {DocURL: hdrAnchor("Add_modules_to_workspace_file"), ArgsDesc: "`moddirs` are module directories to add."},
+		"work vendor": {DocURL: hdrAnchor("Make_vendored_copy_of_dependencies"), ArgsDesc: "No arguments."},
+	}
+	if v, ok := m[name]; ok {
+		return v
+	}
+	return cmdMeta{DocURL: docBase}
+}
+
+func cmdDescription(name string) string {
+	meta := cmdInfo(name)
+	desc := "Doc: " + meta.DocURL
+	return desc
+}
+
+func buildFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{Name: "C", Usage: "Change to dir before running the command (must be first flag).", Category: catGeneral},
+		&cli.BoolFlag{Name: "a", Usage: "Force rebuilding of packages that are already up-to-date.", Category: catBuild},
+		&cli.BoolFlag{Name: "n", Usage: "Print the commands but do not run them.", Category: catOutput},
+		&cli.IntFlag{Name: "p", Usage: "The number of programs that can be run in parallel.", Category: catBuild},
+		&cli.BoolFlag{Name: "race", Usage: "Enable data race detection.", Category: catDebug},
+		&cli.BoolFlag{Name: "msan", Usage: "Enable interoperation with memory sanitizer.", Category: catDebug},
+		&cli.BoolFlag{Name: "asan", Usage: "Enable interoperation with address sanitizer.", Category: catDebug},
+		&cli.BoolFlag{Name: "cover", Usage: "Enable code coverage instrumentation.", Category: catTest},
+		&cli.StringFlag{Name: "covermode", Usage: "Coverage mode: set, count, atomic (sets -cover).", Category: catTest},
+		&cli.StringFlag{Name: "coverpkg", Usage: "Comma-separated patterns of packages for which to apply coverage (sets -cover).", Category: catTest},
+		&cli.BoolFlag{Name: "v", Usage: "Print the names of packages as they are compiled.", Category: catOutput},
+		&cli.BoolFlag{Name: "work", Usage: "Print the name of the temporary work directory and do not delete it.", Category: catOutput},
+		&cli.BoolFlag{Name: "x", Usage: "Print the commands.", Category: catOutput},
+		&cli.BoolFlag{Name: "json", Usage: "Emit build output in JSON suitable for automated processing.", Category: catOutput},
+		&cli.StringFlag{Name: "asmflags", Usage: "Args for each 'go tool asm' (supports [pattern=] prefix).", Category: catBuild},
+		&cli.StringFlag{Name: "buildmode", Usage: "Build mode to use.", Category: catBuild},
+		&cli.StringFlag{Name: "buildvcs", Usage: `Stamp binaries with VCS info: "true","false","auto".`, Category: catBuild},
+		&cli.StringFlag{Name: "compiler", Usage: "Compiler to use: gc or gccgo.", Category: catBuild},
+		&cli.StringFlag{Name: "gccgoflags", Usage: "Args for each gccgo compiler/linker invocation.", Category: catBuild},
+		&cli.StringFlag{Name: "gcflags", Usage: "Args for each 'go tool compile' (supports [pattern=] prefix).", Category: catBuild},
+		&cli.StringFlag{Name: "installsuffix", Usage: "Suffix to use in the package installation directory.", Category: catBuild},
+		&cli.StringFlag{Name: "ldflags", Usage: "Args for each 'go tool link' invocation.", Category: catBuild},
+		&cli.BoolFlag{Name: "linkshared", Usage: "Link against shared libraries created with -buildmode=shared.", Category: catBuild},
+		&cli.StringFlag{Name: "mod", Usage: "Module download mode: readonly, vendor, or mod.", Category: catModule},
+		&cli.BoolFlag{Name: "modcacherw", Usage: "Leave newly-created module cache directories read-write.", Category: catModule},
+		&cli.StringFlag{Name: "modfile", Usage: "Read (and possibly write) an alternate go.mod file.", Category: catModule},
+		&cli.StringFlag{Name: "overlay", Usage: "Read a JSON config file that provides an overlay for build operations.", Category: catBuild},
+		&cli.StringFlag{Name: "pgo", Usage: `PGO profile file ("auto","off", or path).`, Category: catBuild},
+		&cli.StringFlag{Name: "pkgdir", Usage: "Install and load packages from dir instead of the usual locations.", Category: catBuild},
+		&cli.StringFlag{Name: "tags", Usage: "Comma-separated list of build tags to consider satisfied.", Category: catBuild},
+		&cli.StringFlag{Name: "toolexec", Usage: "Program to invoke toolchain programs (vet/asm/compile/link).", Category: catTool},
+		&cli.BoolFlag{Name: "trimpath", Usage: "Remove all file system paths from the resulting executable.", Category: catBuild},
+		&cli.StringFlag{Name: "toolchain", Usage: "Select the Go toolchain to use.", Category: catBuild},
 	}
 }
 
-func printCommandSuggestions(commands []*cli.Command, writer io.Writer) {
-	for _, command := range commands {
-		if command.Hidden {
-			continue
-		}
-		if strings.HasSuffix(os.Getenv("SHELL"), "zsh") {
-			_, _ = fmt.Fprintf(writer, "%s:%s\n", command.Name, command.Usage)
-		} else {
-			_, _ = fmt.Fprintf(writer, "%s (%s)\n", command.Name, command.Usage)
-		}
+func toolGlobalFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{Name: "C", Usage: "Change to dir before running the command (must be first flag).", Category: catGeneral},
+		&cli.StringFlag{Name: "overlay", Usage: "Read a JSON config file that provides an overlay for build operations.", Category: catBuild},
+		&cli.BoolFlag{Name: "modcacherw", Usage: "Leave newly-created module cache directories read-write.", Category: catModule},
+		&cli.StringFlag{Name: "modfile", Usage: "Read (and possibly write) an alternate go.mod file.", Category: catModule},
 	}
 }
 
-func printFlagSuggestions(lastArg string, flags []cli.Flag, writer io.Writer) {
-	// Trim to handle both "-short" and "--long" flags.
-	cur := strings.TrimLeft(lastArg, "-")
-	for _, flag := range flags {
-		if bflag, ok := flag.(*cli.BoolFlag); ok && bflag.Hidden {
-			continue
-		}
+func testBinaryFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{Name: "bench", Usage: "Run only benchmarks matching regexp.", Category: catTest},
+		&cli.StringFlag{Name: "benchtime", Usage: "Run enough iterations to take the specified time (e.g., 1s, 100x).", Category: catTest},
+		&cli.BoolFlag{Name: "benchmem", Usage: "Print memory allocation stats for benchmarks.", Category: catTest},
+		&cli.IntFlag{Name: "count", Usage: "Run each test/benchmark/fuzz seed n times.", Category: catTest},
+		&cli.StringFlag{Name: "cpu", Usage: "Comma-separated list of GOMAXPROCS values.", Category: catTest},
+		&cli.BoolFlag{Name: "failfast", Usage: "Do not start new tests after the first failure.", Category: catTest},
+		&cli.BoolFlag{Name: "fullpath", Usage: "Show full file names in error messages.", Category: catOutput},
+		&cli.StringFlag{Name: "fuzz", Usage: "Run fuzz test matching regexp.", Category: catTest},
+		&cli.StringFlag{Name: "fuzztime", Usage: "Time to spend fuzzing.", Category: catTest},
+		&cli.StringFlag{Name: "list", Usage: "List tests/benchmarks/examples/fuzz tests matching regexp and exit.", Category: catTest},
+		&cli.IntFlag{Name: "parallel", Usage: "Maximum number of tests to run in parallel.", Category: catTest},
+		&cli.StringFlag{Name: "run", Usage: "Run only tests/examples matching regexp.", Category: catTest},
+		&cli.StringFlag{Name: "skip", Usage: "Skip tests matching regexp.", Category: catTest},
+		&cli.BoolFlag{Name: "short", Usage: "Tell long-running tests to shorten run time.", Category: catTest},
+		&cli.StringFlag{Name: "timeout", Usage: "Panic if a test runs longer than t (e.g., 10m).", Category: catTest},
+		&cli.BoolFlag{Name: "v", Usage: "Verbose output: log all tests as they are run.", Category: catOutput},
+		&cli.StringFlag{Name: "json", Usage: "Convert test output to JSON stream.", Category: catOutput},
+		&cli.StringFlag{Name: "coverprofile", Usage: "Write a coverage profile to the named file.", Category: catTest},
+		&cli.StringFlag{Name: "blockprofile", Usage: "Write a goroutine blocking profile to the named file.", Category: catDebug},
+		&cli.IntFlag{Name: "blockprofilerate", Usage: "Set blocking profile rate.", Category: catDebug},
+		&cli.StringFlag{Name: "cpuprofile", Usage: "Write a CPU profile to the named file.", Category: catDebug},
+		&cli.StringFlag{Name: "memprofile", Usage: "Write an allocation profile to the named file.", Category: catDebug},
+		&cli.IntFlag{Name: "memprofilerate", Usage: "Set memory profiling rate.", Category: catDebug},
+		&cli.StringFlag{Name: "mutexprofile", Usage: "Write a mutex contention profile to the named file.", Category: catDebug},
+		&cli.IntFlag{Name: "mutexprofilefraction", Usage: "Set mutex profile fraction.", Category: catDebug},
+		&cli.StringFlag{Name: "trace", Usage: "Write an execution trace to the named file.", Category: catDebug},
+		&cli.StringFlag{Name: "outputdir", Usage: "Write profiles to the specified directory.", Category: catOutput},
+	}
+}
 
-		usage := ""
-		if docFlag, ok := flag.(cli.DocGenerationFlag); ok {
-			usage = docFlag.GetUsage()
-		}
+func argPackage() cli.Argument {
+	return &cli.StringArgs{
+		Name:      "package",
+		UsageText: "Package, Doc: " + hdrAnchor("Package_lists_and_patterns"),
+		Min:       0,
+		Max:       -1,
+	}
+}
 
-		name := strings.TrimSpace(flag.Names()[0])
-		// this will get total count utf8 letters in flag name
-		count := utf8.RuneCountInString(name)
-		if count > 2 {
-			count = 2 // reuse this count to generate single - or -- in flag completion
-		}
-		// if flag name has more than one utf8 letter and last argument in cli has -- prefix then
-		// skip flag completion for short flags example -v or -x
-		if strings.HasPrefix(lastArg, "--") && count == 1 {
-			continue
-		}
-		// match if last argument matches this flag and it is not repeated
-		if strings.HasPrefix(name, cur) && cur != name {
-			flagCompletion := fmt.Sprintf("%s%s", strings.Repeat("-", count), name)
-			if usage != "" && strings.HasSuffix(os.Getenv("SHELL"), "zsh") {
-				flagCompletion = fmt.Sprintf("%s:%s", flagCompletion, usage)
+func argPackageVersion() cli.Argument {
+	return &cli.StringArgs{
+		Name:      "package",
+		UsageText: "Package with version, Doc: " + hdrAnchor("Package_lists_and_patterns"),
+		Min:       0,
+		Max:       -1,
+	}
+}
+
+// https://pkg.go.dev/cmd/go#hdr-Package_lists_and_patterns
+
+// ---- commands: positional args defined DIRECTLY per command ----
+
+func cmdBug() *cli.Command {
+	return &cli.Command{
+		Name:  "bug",
+		Usage: "start a bug report",
+		Metadata: map[string]any{
+			"DocURL": hdrAnchor("Start a bug report"),
+		},
+		Description: "",
+		ArgsUsage:   "",
+		Arguments:   nil,
+		Action:      execGo,
+	}
+}
+
+func cmdBuild() *cli.Command {
+	return &cli.Command{
+		Name:        "build",
+		Usage:       "compile packages and dependencies",
+		Metadata: map[string]any{
+			"DocURL": hdrAnchor("Compile packages and dependencies"),
+		},
+		Description: "",
+		Flags: append([]cli.Flag{
+			&cli.StringFlag{Name: "o", Usage: "Output file or directory.", Category: catOutput},
+		}, buildFlags()...),
+		ArgsUsage: "[packages]",
+		Arguments: []cli.Argument{argPackage()},
+		Action:    execGo,
+	}
+}
+
+func cmdClean() *cli.Command {
+	return &cli.Command{
+		Name:        "clean",
+		Usage:       "remove object files and cached files",
+		Description: cmdDescription("clean"),
+		Flags: append([]cli.Flag{
+			&cli.BoolFlag{Name: "i", Usage: "Remove the installed packages for the named targets.", Category: catBuild},
+			&cli.BoolFlag{Name: "r", Usage: "Remove obj and installed files recursively for args and deps.", Category: catBuild},
+			&cli.BoolFlag{Name: "cache", Usage: "Remove all cached build and test results.", Category: catBuild},
+			&cli.BoolFlag{Name: "testcache", Usage: "Expire all test results in the cache.", Category: catTest},
+			&cli.BoolFlag{Name: "modcache", Usage: "Remove the entire module download cache.", Category: catModule},
+			&cli.BoolFlag{Name: "fuzzcache", Usage: "Remove all cached fuzzing values.", Category: catTest},
+		}, buildFlags()...),
+		ArgsUsage: "[packages]",
+		Arguments: []cli.Argument{argPackage()},
+		Action:    execGo,
+	}
+}
+
+func cmdDoc() *cli.Command {
+	return &cli.Command{
+		Name:        "doc",
+		Usage:       "show documentation for package or symbol",
+		Description: cmdDescription("doc"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "all", Usage: "Show all the documentation for the package.", Category: catOutput},
+			&cli.BoolFlag{Name: "c", Usage: "Respect case when matching symbols.", Category: catGeneral},
+			&cli.BoolFlag{Name: "cmd", Usage: "Treat a command (package main) like a regular package.", Category: catGeneral},
+			&cli.BoolFlag{Name: "http", Usage: "Serve HTML docs over HTTP.", Category: catTool},
+			&cli.BoolFlag{Name: "short", Usage: "One-line representation for each symbol.", Category: catOutput},
+			&cli.BoolFlag{Name: "src", Usage: "Show the full source code for the symbol.", Category: catOutput},
+			&cli.BoolFlag{Name: "u", Usage: "Show docs for unexported symbols too.", Category: catOutput},
+		},
+		ArgsUsage: "package[.symbol[.methodOrField]]",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "query", UsageText: "Package, symbol, method or field", Min: 0, Max: -1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdEnv() *cli.Command {
+	return &cli.Command{
+		Name:        "env",
+		Usage:       "print Go environment information",
+		Description: cmdDescription("env"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "json", Usage: "Print environment in JSON format.", Category: catOutput},
+			&cli.BoolFlag{Name: "changed", Usage: "Print only settings that differ from defaults.", Category: catOutput},
+			&cli.BoolFlag{Name: "u", Usage: "Unset default settings for named variables.", Category: catGeneral},
+			&cli.BoolFlag{Name: "w", Usage: "Set default settings for named variables.", Category: catGeneral},
+		},
+		ArgsUsage: "[NAME[=VALUE]]...",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "variable", UsageText: "Environment variable names (e.g. GOPATH, GOMOD)", Min: 0, Max: -1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdFix() *cli.Command {
+	return &cli.Command{
+		Name:        "fix",
+		Usage:       "update packages to use new APIs",
+		Description: cmdDescription("fix"),
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "fix", Usage: "Comma-separated list of fixes to run.", Category: catGeneral},
+		},
+		ArgsUsage: "[packages]",
+		Arguments: []cli.Argument{argPackage()},
+		Action:    execGo,
+	}
+}
+
+func cmdFmt() *cli.Command {
+	return &cli.Command{
+		Name:        "fmt",
+		Usage:       "gofmt (reformat) package sources",
+		Description: cmdDescription("fmt"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "n", Usage: "Print commands that would be executed.", Category: catOutput},
+			&cli.BoolFlag{Name: "x", Usage: "Print commands as they are executed.", Category: catOutput},
+		},
+		ArgsUsage: "[packages]",
+		Arguments: []cli.Argument{argPackage()},
+		Action:    execGo,
+	}
+}
+
+func cmdGenerate() *cli.Command {
+	return &cli.Command{
+		Name:        "generate",
+		Usage:       "generate Go files by processing source",
+		Description: cmdDescription("generate"),
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "run", Usage: "Run only generators matching the regexp.", Category: catGeneral},
+			&cli.BoolFlag{Name: "n", Usage: "Print commands but do not run them.", Category: catOutput},
+			&cli.BoolFlag{Name: "v", Usage: "Verbose output.", Category: catOutput},
+			&cli.BoolFlag{Name: "x", Usage: "Print commands as they are executed.", Category: catOutput},
+			&cli.StringFlag{Name: "tags", Usage: "Comma-separated list of build tags.", Category: catBuild},
+		},
+		ArgsUsage: "[packages | file.go]",
+		Arguments: []cli.Argument{
+			argPackage(),
+			&cli.StringArgs{Name: "file.go", UsageText: ""},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdGet() *cli.Command {
+	return &cli.Command{
+		Name:        "get",
+		Usage:       "add dependencies to current module and install them",
+		Description: cmdDescription("get"),
+		Flags: append([]cli.Flag{
+			&cli.BoolFlag{Name: "t", Usage: "Also download test dependencies.", Category: catModule},
+			&cli.BoolFlag{Name: "u", Usage: "Update modules providing dependencies.", Category: catModule},
+			&cli.BoolFlag{Name: "tool", Usage: "Add packages as tool dependencies (tool directive).", Category: catModule},
+		}, buildFlags()...),
+		ArgsUsage: "[package@[version|latest|patch|none]]...",
+		Arguments: []cli.Argument{argPackageVersion()},
+		Action:    execGo,
+	}
+}
+
+func cmdHelp() *cli.Command {
+	return &cli.Command{
+		Name:        "help",
+		Usage:       "show information about command or topic",
+		Description: cmdDescription("help"),
+		Commands: []*cli.Command{
+			{Name: "buildconstraint", Usage: "build constraints", Action: execGo},
+			{Name: "buildmode", Usage: "build modes", Action: execGo},
+			{Name: "c", Usage: "calling between Go and C", Action: execGo},
+			{Name: "cache", Usage: "build and test caching", Action: execGo},
+			{Name: "environment", Usage: "environment variables", Action: execGo},
+			{Name: "filetype", Usage: "file types", Action: execGo},
+			{Name: "go.mod", Usage: "the go.mod file", Action: execGo},
+			{Name: "gopath", Usage: "GOPATH environment variable", Action: execGo},
+			{Name: "goproxy", Usage: "module proxy protocol", Action: execGo},
+			{Name: "importpath", Usage: "import path syntax", Action: execGo},
+			{Name: "modules", Usage: "modules, module versions, and more", Action: execGo},
+			{Name: "module-auth", Usage: "module authentication using go.sum", Action: execGo},
+			{Name: "packages", Usage: "package lists and patterns", Action: execGo},
+			{Name: "private", Usage: "configuration for downloading non-public code", Action: execGo},
+			{Name: "testflag", Usage: "testing flags", Action: execGo},
+			{Name: "testfunc", Usage: "testing functions", Action: execGo},
+			{Name: "vcs", Usage: "controlling version control with GOVCS", Action: execGo},
+		},
+		UsageText: "go help [command|topic] [subcommand]...",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "query", UsageText: "help query", Min: 0, Max: -1},
+		},
+		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
+			commands := []*cli.Command{}
+			for _, cmd := range c.Root().Commands {
+				commands = append(commands, &cli.Command{
+					Name:   cmd.Name,
+					Usage:  cmd.Usage,
+					Action: execGo,
+				})
 			}
-			fmt.Fprintln(writer, flagCompletion)
-		}
+			c.Commands = append(commands, c.Commands...)
+			return ctx, nil
+		},
+		Action: execGo,
 	}
 }
 
-func CompleteCommandsAndFlags(ctx context.Context, cmd *cli.Command) {
-	args := cmd.Args().Slice()
-	argsLen := len(args)
-	lastArg := ""
-	// parent command will have --generate-shell-completion so we need
-	// to account for that
-	if argsLen > 1 {
-		lastArg = args[argsLen-2]
-	} else if argsLen > 0 {
-		lastArg = args[argsLen-1]
-	}
-
-	if lastArg == "--" {
-		return
-	}
-
-	if lastArg == "--generate-shell-completion" {
-		lastArg = ""
-	}
-
-	if strings.HasPrefix(lastArg, "-") {
-		printFlagSuggestions(lastArg, cmd.Flags, cmd.Root().Writer)
-		return
-	}
-
-	if cmd != nil {
-		printCommandSuggestions(cmd.Commands, cmd.Root().Writer)
-		return
+func cmdInstall() *cli.Command {
+	return &cli.Command{
+		Name:        "install",
+		Usage:       "compile and install packages and dependencies",
+		Description: cmdDescription("install"),
+		Flags:       buildFlags(),
+		ArgsUsage:   "[package[@version|latest]]...",
+		Arguments:   []cli.Argument{argPackageVersion()},
+		Action:      execGo,
 	}
 }
 
-func main() {
-	ctx := context.Background()
-	cmd := cmdGo()
-	if err := cmd.Run(ctx, os.Args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+func cmdList() *cli.Command {
+	return &cli.Command{
+		Name:        "list",
+		Usage:       "list packages or modules",
+		Description: cmdDescription("list"),
+		Flags: append([]cli.Flag{
+			&cli.BoolFlag{Name: "deps", Usage: "List dependencies of each package.", Category: catGeneral},
+			&cli.StringFlag{Name: "f", Usage: "Print using a custom format.", Category: catOutput},
+			&cli.BoolFlag{Name: "find", Usage: "Identify packages but do not resolve dependencies.", Category: catGeneral},
+			&cli.BoolFlag{Name: "json", Usage: "Print JSON instead of text.", Category: catOutput},
+			&cli.BoolFlag{Name: "m", Usage: "List modules instead of packages.", Category: catModule},
+			&cli.BoolFlag{Name: "test", Usage: "Include test packages.", Category: catTest},
+			&cli.BoolFlag{Name: "u", Usage: "When -m, also show available upgrades (with -versions).", Category: catModule},
+			&cli.BoolFlag{Name: "retracted", Usage: "When -m, include retracted versions.", Category: catModule},
+			&cli.BoolFlag{Name: "versions", Usage: "When -m, show available versions.", Category: catModule},
+		}, buildFlags()...),
+		ArgsUsage: "[packages]",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "targets", UsageText: "Packages (or modules when -m)", Min: 0, Max: -1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdRun() *cli.Command {
+	return &cli.Command{
+		Name:        "run",
+		Usage:       "compile and run Go program",
+		Description: cmdDescription("run"),
+		Flags: append([]cli.Flag{
+			&cli.StringFlag{Name: "exec", Usage: "Run the generated binary under xprog (like 'time').", Category: catTool},
+		}, buildFlags()...),
+		ArgsUsage: "package[@version] [arguments...]",
+		Arguments: []cli.Argument{
+			&cli.StringArg{Name: "package", UsageText: "Program package to run"},
+			&cli.StringArgs{Name: "arguments", UsageText: "Arguments passed to the compiled program", Min: 0, Max: -1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdTelemetry() *cli.Command {
+	return &cli.Command{
+		Name:        "telemetry",
+		Usage:       "manage telemetry data and settings",
+		Description: cmdDescription("telemetry"),
+		ArgsUsage:   "[off|local|on]",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "setting", UsageText: "Optional: off | local | on", Min: 0, Max: 1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdTest() *cli.Command {
+	return &cli.Command{
+		Name:        "test",
+		Usage:       "test packages",
+		Description: cmdDescription("test"),
+		Flags:       append(buildFlags(), testBinaryFlags()...),
+		ArgsUsage:   "[packages] [build/test flags] [test binary flags]",
+		Arguments:   []cli.Argument{argPackage()},
+		Action:      execGo,
+	}
+}
+
+func cmdTool() *cli.Command {
+	return &cli.Command{
+		Name:        "tool",
+		Usage:       "run specified go tool",
+		Description: cmdDescription("tool"),
+		Flags:       toolGlobalFlags(),
+		Action:      execGo,
+	}
+}
+
+func cmdVersion() *cli.Command {
+	return &cli.Command{
+		Name:        "version",
+		Usage:       "print Go version",
+		Description: cmdDescription("version"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "m", Usage: "Print module version information (when available).", Category: catModule},
+			&cli.BoolFlag{Name: "v", Usage: "Report unrecognized files when scanning directories.", Category: catOutput},
+			&cli.BoolFlag{Name: "json", Usage: "Print build info as JSON (requires -m).", Category: catOutput},
+		},
+		ArgsUsage: "[file]...",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "file", UsageText: "Go binaries to inspect", Min: 0, Max: -1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdVet() *cli.Command {
+	return &cli.Command{
+		Name:        "vet",
+		Usage:       "report likely mistakes in packages",
+		Description: cmdDescription("vet"),
+		Flags: append([]cli.Flag{
+			&cli.StringFlag{Name: "vettool", Usage: "Use a different analysis tool.", Category: catTool},
+		}, buildFlags()...),
+		ArgsUsage: "[package]...",
+		Arguments: []cli.Argument{argPackage()},
+		Action:    execGo,
+	}
+}
+
+// ---- go mod (with subcommands) ----
+
+func cmdMod() *cli.Command {
+	return &cli.Command{
+		Name:        "mod",
+		Usage:       "module maintenance",
+		Description: cmdDescription("mod"),
+		Commands: []*cli.Command{
+			cmdModDownload(),
+			cmdModEdit(),
+			cmdModGraph(),
+			cmdModInit(),
+			cmdModTidy(),
+			cmdModVendor(),
+			cmdModVerify(),
+			cmdModWhy(),
+		},
+		Action: execGo,
+	}
+}
+
+func cmdModDownload() *cli.Command {
+	return &cli.Command{
+		Name:        "download",
+		Usage:       "download modules to local cache",
+		Description: cmdDescription("mod download"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "json", Usage: "Print JSON output.", Category: catOutput},
+			&cli.BoolFlag{Name: "x", Usage: "Print commands as they are executed.", Category: catOutput},
+		},
+		ArgsUsage: "package[@version]...",
+		Arguments: []cli.Argument{argPackageVersion()},
+		Action:    execGo,
+	}
+}
+
+func cmdModEdit() *cli.Command {
+	return &cli.Command{
+		Name:        "edit",
+		Usage:       "edit go.mod from tools or scripts",
+		Description: cmdDescription("mod edit"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "fmt", Usage: "Reformat go.mod.", Category: catModule},
+			&cli.StringFlag{Name: "go", Usage: "Set the expected Go language version.", Category: catModule},
+			&cli.StringFlag{Name: "toolchain", Usage: "Set the toolchain line.", Category: catModule},
+			&cli.BoolFlag{Name: "print", Usage: "Print go.mod after edits.", Category: catOutput},
+			&cli.BoolFlag{Name: "json", Usage: "Print go.mod after edits in JSON.", Category: catOutput},
+			&cli.StringSliceFlag{Name: "require", Usage: "Add a requirement (path@version).", Category: catModule},
+			&cli.StringSliceFlag{Name: "droprequire", Usage: "Drop a requirement (path).", Category: catModule},
+			&cli.StringSliceFlag{Name: "replace", Usage: "Add a replace directive old[@v]=new[@v].", Category: catModule},
+			&cli.StringSliceFlag{Name: "dropreplace", Usage: "Drop a replace directive old[@v].", Category: catModule},
+			&cli.StringSliceFlag{Name: "exclude", Usage: "Add an exclude directive (path@version).", Category: catModule},
+			&cli.StringSliceFlag{Name: "dropexclude", Usage: "Drop an exclude directive (path@version).", Category: catModule},
+			&cli.StringSliceFlag{Name: "retract", Usage: "Add a retract directive (version range).", Category: catModule},
+			&cli.StringSliceFlag{Name: "dropretract", Usage: "Drop a retract directive (version range).", Category: catModule},
+			&cli.StringSliceFlag{Name: "tool", Usage: "Add a tool directive (path@version).", Category: catModule},
+			&cli.StringSliceFlag{Name: "droptool", Usage: "Drop a tool directive (path).", Category: catModule},
+		},
+		ArgsUsage: "[go.mod]",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "go.mod", UsageText: "Optional path to a go.mod file (default: ./go.mod)", Min: 0, Max: 1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdModGraph() *cli.Command {
+	return &cli.Command{
+		Name:        "graph",
+		Usage:       "print module requirement graph",
+		Description: cmdDescription("mod graph"),
+		Action:      execGo,
+	}
+}
+
+func cmdModInit() *cli.Command {
+	return &cli.Command{
+		Name:        "init",
+		Usage:       "initialize new module in current directory",
+		Description: cmdDescription("mod init"),
+		ArgsUsage:   "[module-path]",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "module-path", UsageText: "Optional module path to initialize", Min: 0, Max: 1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdModTidy() *cli.Command {
+	return &cli.Command{
+		Name:        "tidy",
+		Usage:       "add missing and remove unused modules",
+		Description: cmdDescription("mod tidy"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "e", Usage: "Report errors but proceed (best effort).", Category: catModule},
+			&cli.BoolFlag{Name: "v", Usage: "Verbose output.", Category: catOutput},
+			&cli.BoolFlag{Name: "x", Usage: "Print commands as they are executed.", Category: catOutput},
+			&cli.BoolFlag{Name: "diff", Usage: "Print changes instead of applying them.", Category: catOutput},
+			&cli.StringFlag{Name: "go", Usage: "Set -go=version for tidy.", Category: catModule},
+			&cli.StringFlag{Name: "compat", Usage: "Set -compat=version for tidy.", Category: catModule},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdModVendor() *cli.Command {
+	return &cli.Command{
+		Name:        "vendor",
+		Usage:       "make vendored copy of dependencies",
+		Description: cmdDescription("mod vendor"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "e", Usage: "Attempt to proceed despite errors.", Category: catModule},
+			&cli.BoolFlag{Name: "v", Usage: "Print names of vendored modules and packages.", Category: catOutput},
+			&cli.StringFlag{Name: "o", Usage: "Output directory.", Category: catOutput},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdModVerify() *cli.Command {
+	return &cli.Command{
+		Name:        "verify",
+		Usage:       "verify dependencies have expected content",
+		Description: cmdDescription("mod verify"),
+		Action:      execGo,
+	}
+}
+
+func cmdModWhy() *cli.Command {
+	return &cli.Command{
+		Name:        "why",
+		Usage:       "explain why packages or modules are needed",
+		Description: cmdDescription("mod why"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "m", Usage: "Treat arguments as modules.", Category: catModule},
+		},
+		ArgsUsage: "package...",
+		Arguments: []cli.Argument{argPackage()},
+		Action:    execGo,
+	}
+}
+
+// ---- go work (with subcommands) ----
+
+func cmdWork() *cli.Command {
+	return &cli.Command{
+		Name:        "work",
+		Usage:       "workspace maintenance",
+		Description: cmdDescription("work"),
+		Commands: []*cli.Command{
+			cmdWorkEdit(),
+			cmdWorkInit(),
+			cmdWorkSync(),
+			cmdWorkUse(),
+			cmdWorkVendor(),
+		},
+		ArgsUsage: "<command> [argument]...",
+		Action:    execGo,
+	}
+}
+
+func cmdWorkEdit() *cli.Command {
+	return &cli.Command{
+		Name:        "edit",
+		Usage:       "edit go.work from tools or scripts",
+		Description: cmdDescription("work edit"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "fmt", Usage: "Reformat go.work.", Category: catWorkspace},
+			&cli.StringFlag{Name: "go", Usage: "Set expected Go language version.", Category: catWorkspace},
+			&cli.StringFlag{Name: "toolchain", Usage: "Set toolchain name.", Category: catWorkspace},
+			&cli.BoolFlag{Name: "print", Usage: "Print go.work after edits.", Category: catOutput},
+			&cli.BoolFlag{Name: "json", Usage: "Print go.work after edits in JSON.", Category: catOutput},
+			&cli.StringSliceFlag{Name: "use", Usage: "Add use=path directive (may repeat).", Category: catWorkspace},
+			&cli.StringSliceFlag{Name: "dropuse", Usage: "Drop use=path directive (may repeat).", Category: catWorkspace},
+			&cli.StringSliceFlag{Name: "replace", Usage: "Add replace old[@v]=new[@v].", Category: catWorkspace},
+			&cli.StringSliceFlag{Name: "dropreplace", Usage: "Drop replace old[@v].", Category: catWorkspace},
+		},
+		ArgsUsage: "[go.work]",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "go.work", UsageText: "Optional path to a go.work file (default: ./go.work)", Min: 0, Max: 1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdWorkInit() *cli.Command {
+	return &cli.Command{
+		Name:        "init",
+		Usage:       "initialize workspace file",
+		Description: cmdDescription("work init"),
+		ArgsUsage:   "[moddir]...",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "moddir", UsageText: "Module directory to add as use directives", Min: 0, Max: -1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdWorkSync() *cli.Command {
+	return &cli.Command{
+		Name:        "sync",
+		Usage:       "sync workspace build list to modules",
+		Description: cmdDescription("work sync"),
+		Action:      execGo,
+	}
+}
+
+func cmdWorkUse() *cli.Command {
+	return &cli.Command{
+		Name:        "use",
+		Usage:       "add modules to workspace file",
+		Description: cmdDescription("work use"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "r", Usage: "Search directories recursively.", Category: catWorkspace},
+		},
+		ArgsUsage: "[moddir]...",
+		Arguments: []cli.Argument{
+			&cli.StringArgs{Name: "moddir", UsageText: "Module directory to add to the workspace", Min: 0, Max: -1},
+		},
+		Action: execGo,
+	}
+}
+
+func cmdWorkVendor() *cli.Command {
+	return &cli.Command{
+		Name:        "vendor",
+		Usage:       "make vendored copy of dependencies",
+		Description: cmdDescription("work vendor"),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "e", Usage: "Attempt to proceed despite errors.", Category: catWorkspace},
+			&cli.BoolFlag{Name: "v", Usage: "Print names of vendored modules and packages.", Category: catOutput},
+			&cli.StringFlag{Name: "o", Usage: "Output directory.", Category: catOutput},
+		},
+		Action: execGo,
 	}
 }
