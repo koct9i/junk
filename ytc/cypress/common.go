@@ -91,6 +91,7 @@ func parseValue(s string) (any, error) {
 		if err := json.Unmarshal([]byte(s), &value); err != nil {
 			return s, nil
 		}
+		return foldYSONNodes(value)
 	case "yson":
 		if err := yson.Unmarshal([]byte(s), &value); err != nil {
 			return nil, err
@@ -99,11 +100,100 @@ func parseValue(s string) (any, error) {
 		if err := yaml.Unmarshal([]byte(s), &value); err != nil {
 			return nil, err
 		}
+		return foldYSONNodes(value)
 	default:
 		return nil, fmt.Errorf("unsupported format %q", format)
 	}
 
 	return value, nil
+}
+
+func foldYSONNodes(value any) (any, error) {
+	switch typed := value.(type) {
+	case []any:
+		for i, item := range typed {
+			folded, err := foldYSONNodes(item)
+			if err != nil {
+				return nil, err
+			}
+			typed[i] = folded
+		}
+		return typed, nil
+	case map[string]any:
+		_, hasValue := typed["$value"]
+		_, hasAttrs := typed["$attributes"]
+		if hasValue || hasAttrs {
+			return foldYSONNode(typed, hasValue, hasAttrs)
+		}
+		for key, item := range typed {
+			folded, err := foldYSONNodes(item)
+			if err != nil {
+				return nil, err
+			}
+			typed[key] = folded
+		}
+		return typed, nil
+	case map[any]any:
+		converted := make(map[string]any, len(typed))
+		for key, item := range typed {
+			keyString, ok := key.(string)
+			if !ok {
+				return nil, fmt.Errorf("unsupported non-string map key %v", key)
+			}
+			converted[keyString] = item
+		}
+		return foldYSONNodes(converted)
+	default:
+		return value, nil
+	}
+}
+
+func foldYSONNode(node map[string]any, hasValue, hasAttrs bool) (any, error) {
+	var foldedValue any
+	if hasValue {
+		var err error
+		foldedValue, err = foldYSONNodes(node["$value"])
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	attrs := map[string]any(nil)
+	if hasAttrs {
+		attrsMap, err := stringMap(node["$attributes"])
+		if err != nil {
+			return nil, fmt.Errorf("$attributes must be an object: %w", err)
+		}
+		attrs = make(map[string]any, len(attrsMap))
+		for key, item := range attrsMap {
+			folded, err := foldYSONNodes(item)
+			if err != nil {
+				return nil, err
+			}
+			attrs[key] = folded
+		}
+	}
+
+	return &yson.ValueWithAttrs{Attrs: attrs, Value: foldedValue}, nil
+}
+
+func stringMap(value any) (map[string]any, error) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed, nil
+	case map[any]any:
+		converted := make(map[string]any, len(typed))
+		for key, item := range typed {
+			keyString, ok := key.(string)
+			if !ok {
+				return nil, fmt.Errorf("unsupported non-string map key %v", key)
+			}
+			converted[keyString] = item
+		}
+		return converted, nil
+	default:
+		return nil, fmt.Errorf("got %T", value)
+	}
 }
 
 func readValue(c *cli.Command) (any, error) {
