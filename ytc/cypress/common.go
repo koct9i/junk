@@ -91,7 +91,7 @@ func parseValue(s string) (any, error) {
 		if err := json.Unmarshal([]byte(s), &value); err != nil {
 			return s, nil
 		}
-		return foldYSONNodes(value)
+		return foldYSONAttributes(value)
 	case "yson":
 		if err := yson.Unmarshal([]byte(s), &value); err != nil {
 			return nil, err
@@ -100,7 +100,7 @@ func parseValue(s string) (any, error) {
 		if err := yaml.Unmarshal([]byte(s), &value); err != nil {
 			return nil, err
 		}
-		return foldYSONNodes(value)
+		return foldYSONAttributes(value)
 	default:
 		return nil, fmt.Errorf("unsupported format %q", format)
 	}
@@ -108,11 +108,11 @@ func parseValue(s string) (any, error) {
 	return value, nil
 }
 
-func foldYSONNodes(value any) (any, error) {
+func foldYSONAttributes(value any) (any, error) {
 	switch typed := value.(type) {
 	case []any:
 		for i, item := range typed {
-			folded, err := foldYSONNodes(item)
+			folded, err := foldYSONAttributes(item)
 			if err != nil {
 				return nil, err
 			}
@@ -122,11 +122,37 @@ func foldYSONNodes(value any) (any, error) {
 	case map[string]any:
 		_, hasValue := typed["$value"]
 		_, hasAttrs := typed["$attributes"]
-		if hasValue || hasAttrs {
-			return foldYSONNode(typed, hasValue, hasAttrs)
+		if hasOnlyYSONAttributeKeys(typed, hasValue, hasAttrs) {
+			var foldedValue any
+			if hasValue {
+				var err error
+				foldedValue, err = foldYSONAttributes(typed["$value"])
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			attrs := map[string]any(nil)
+			if hasAttrs {
+				attrsMap, err := stringMap(typed["$attributes"])
+				if err != nil {
+					return nil, fmt.Errorf("$attributes must be an object: %w", err)
+				}
+				attrs = make(map[string]any, len(attrsMap))
+				for key, item := range attrsMap {
+					folded, err := foldYSONAttributes(item)
+					if err != nil {
+						return nil, err
+					}
+					attrs[key] = folded
+				}
+			}
+
+			return &yson.ValueWithAttrs{Attrs: attrs, Value: foldedValue}, nil
 		}
+
 		for key, item := range typed {
-			folded, err := foldYSONNodes(item)
+			folded, err := foldYSONAttributes(item)
 			if err != nil {
 				return nil, err
 			}
@@ -142,58 +168,22 @@ func foldYSONNodes(value any) (any, error) {
 			}
 			converted[keyString] = item
 		}
-		return foldYSONNodes(converted)
+		return foldYSONAttributes(converted)
 	default:
 		return value, nil
 	}
 }
 
-func foldYSONNode(node map[string]any, hasValue, hasAttrs bool) (any, error) {
-	foldedValue, err := foldYSONNodeValue(node, hasValue)
-	if err != nil {
-		return nil, err
+func hasOnlyYSONAttributeKeys(node map[string]any, hasValue, hasAttrs bool) bool {
+	if !hasValue && !hasAttrs {
+		return false
 	}
-
-	attrs := map[string]any(nil)
-	if hasAttrs {
-		attrsMap, err := stringMap(node["$attributes"])
-		if err != nil {
-			return nil, fmt.Errorf("$attributes must be an object: %w", err)
-		}
-		attrs = make(map[string]any, len(attrsMap))
-		for key, item := range attrsMap {
-			folded, err := foldYSONNodes(item)
-			if err != nil {
-				return nil, err
-			}
-			attrs[key] = folded
+	for key := range node {
+		if key != "$value" && key != "$attributes" {
+			return false
 		}
 	}
-
-	return &yson.ValueWithAttrs{Attrs: attrs, Value: foldedValue}, nil
-}
-
-func foldYSONNodeValue(node map[string]any, hasValue bool) (any, error) {
-	if hasValue {
-		for key := range node {
-			if key != "$value" && key != "$attributes" {
-				return nil, fmt.Errorf("unexpected key %q alongside $value", key)
-			}
-		}
-		return foldYSONNodes(node["$value"])
-	}
-
-	value := make(map[string]any, len(node)-1)
-	for key, item := range node {
-		if key == "$attributes" {
-			continue
-		}
-		value[key] = item
-	}
-	if len(value) == 0 {
-		return nil, nil
-	}
-	return foldYSONNodes(value)
+	return true
 }
 
 func stringMap(value any) (map[string]any, error) {
