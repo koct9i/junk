@@ -149,13 +149,9 @@ func foldYSONNodes(value any) (any, error) {
 }
 
 func foldYSONNode(node map[string]any, hasValue, hasAttrs bool) (any, error) {
-	var foldedValue any
-	if hasValue {
-		var err error
-		foldedValue, err = foldYSONNodes(node["$value"])
-		if err != nil {
-			return nil, err
-		}
+	foldedValue, err := foldYSONNodeValue(node, hasValue)
+	if err != nil {
+		return nil, err
 	}
 
 	attrs := map[string]any(nil)
@@ -175,6 +171,29 @@ func foldYSONNode(node map[string]any, hasValue, hasAttrs bool) (any, error) {
 	}
 
 	return &yson.ValueWithAttrs{Attrs: attrs, Value: foldedValue}, nil
+}
+
+func foldYSONNodeValue(node map[string]any, hasValue bool) (any, error) {
+	if hasValue {
+		for key := range node {
+			if key != "$value" && key != "$attributes" {
+				return nil, fmt.Errorf("unexpected key %q alongside $value", key)
+			}
+		}
+		return foldYSONNodes(node["$value"])
+	}
+
+	value := make(map[string]any, len(node)-1)
+	for key, item := range node {
+		if key == "$attributes" {
+			continue
+		}
+		value[key] = item
+	}
+	if len(value) == 0 {
+		return nil, nil
+	}
+	return foldYSONNodes(value)
 }
 
 func stringMap(value any) (map[string]any, error) {
