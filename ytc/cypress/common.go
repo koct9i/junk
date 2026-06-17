@@ -120,21 +120,16 @@ func foldYSONAttributes(value any) (any, error) {
 		}
 		return typed, nil
 	case map[string]any:
-		_, hasValue := typed["$value"]
-		_, hasAttrs := typed["$attributes"]
-		if hasOnlyYSONAttributeKeys(typed, hasValue, hasAttrs) {
-			var foldedValue any
-			if hasValue {
-				var err error
-				foldedValue, err = foldYSONAttributes(typed["$value"])
-				if err != nil {
-					return nil, err
-				}
+		nodeValue, nodeAttrs, isAttributeNode := ysonAttributeFields(typed)
+		if isAttributeNode {
+			foldedValue, err := foldYSONAttributes(nodeValue)
+			if err != nil {
+				return nil, err
 			}
 
 			attrs := map[string]any(nil)
-			if hasAttrs {
-				attrsMap, err := stringMap(typed["$attributes"])
+			if nodeAttrs != nil {
+				attrsMap, err := stringMap(nodeAttrs)
 				if err != nil {
 					return nil, fmt.Errorf("$attributes must be an object: %w", err)
 				}
@@ -174,16 +169,23 @@ func foldYSONAttributes(value any) (any, error) {
 	}
 }
 
-func hasOnlyYSONAttributeKeys(node map[string]any, hasValue, hasAttrs bool) bool {
-	if !hasValue && !hasAttrs {
-		return false
-	}
-	for key := range node {
-		if key != "$value" && key != "$attributes" {
-			return false
+func ysonAttributeFields(node map[string]any) (any, any, bool) {
+	switch len(node) {
+	case 1:
+		if value, ok := node["$value"]; ok {
+			return value, nil, true
+		}
+		if attrs, ok := node["$attributes"]; ok {
+			return nil, attrs, true
+		}
+	case 2:
+		value, hasValue := node["$value"]
+		attrs, hasAttrs := node["$attributes"]
+		if hasValue && hasAttrs {
+			return value, attrs, true
 		}
 	}
-	return true
+	return nil, nil, false
 }
 
 func stringMap(value any) (map[string]any, error) {
