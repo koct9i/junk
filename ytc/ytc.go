@@ -11,6 +11,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/koct9i/junk/ytc/cypress"
 	"github.com/koct9i/junk/ytc/log"
 )
 
@@ -55,7 +56,7 @@ func main() {
 			}
 			return nil
 		},
-		Commands: []*cli.Command{},
+		Commands: cypress.Commands(),
 	}
 	args := append(strings.Split(os.Args[0], "__"), os.Args[1:]...)
 	if err := command.Run(ctx, args); err != nil {
