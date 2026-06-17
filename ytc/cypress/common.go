@@ -120,53 +120,59 @@ func foldYSONAttributes(value any) (any, error) {
 		}
 		return typed, nil
 	case map[string]any:
-		nodeValue, nodeAttrs, isAttributeNode := ysonAttributeFields(typed)
-		if isAttributeNode {
-			foldedValue, err := foldYSONAttributes(nodeValue)
-			if err != nil {
-				return nil, err
-			}
-
-			attrs := map[string]any(nil)
-			if nodeAttrs != nil {
-				attrsMap, err := stringMap(nodeAttrs)
-				if err != nil {
-					return nil, fmt.Errorf("$attributes must be an object: %w", err)
-				}
-				attrs = make(map[string]any, len(attrsMap))
-				for key, item := range attrsMap {
-					folded, err := foldYSONAttributes(item)
-					if err != nil {
-						return nil, err
-					}
-					attrs[key] = folded
-				}
-			}
-
-			return &yson.ValueWithAttrs{Attrs: attrs, Value: foldedValue}, nil
-		}
-
-		for key, item := range typed {
-			folded, err := foldYSONAttributes(item)
-			if err != nil {
-				return nil, err
-			}
-			typed[key] = folded
-		}
-		return typed, nil
+		return foldYSONAttributeMap(typed)
 	case map[any]any:
-		converted := make(map[string]any, len(typed))
-		for key, item := range typed {
-			keyString, ok := key.(string)
-			if !ok {
-				return nil, fmt.Errorf("unsupported non-string map key %v", key)
-			}
-			converted[keyString] = item
-		}
-		return foldYSONAttributes(converted)
+		return foldYSONAttributeMap(typed)
 	default:
 		return value, nil
 	}
+}
+
+func foldYSONAttributeMap[T comparable](node map[T]any) (any, error) {
+	converted, err := stringMap(node)
+	if err != nil {
+		return nil, err
+	}
+
+	nodeValue, nodeAttrs, isAttributeNode := ysonAttributeFields(converted)
+	if !isAttributeNode {
+		return foldYSONAttributeMapValues(converted)
+	}
+
+	foldedValue, err := foldYSONAttributes(nodeValue)
+	if err != nil {
+		return nil, err
+	}
+
+	attrs := map[string]any(nil)
+	if nodeAttrs != nil {
+		attrs, err = stringMap(nodeAttrs)
+		if err != nil {
+			return nil, fmt.Errorf("$attributes must be an object: %w", err)
+		}
+		attrs, err = foldYSONAttributeMapValues(attrs)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &yson.ValueWithAttrs{Attrs: attrs, Value: foldedValue}, nil
+}
+
+func foldYSONAttributeMapValues[T comparable](node map[T]any) (map[string]any, error) {
+	converted, err := stringMap(node)
+	if err != nil {
+		return nil, err
+	}
+
+	for key, item := range converted {
+		folded, err := foldYSONAttributes(item)
+		if err != nil {
+			return nil, err
+		}
+		converted[key] = folded
+	}
+	return converted, nil
 }
 
 func ysonAttributeFields(node map[string]any) (any, any, bool) {
