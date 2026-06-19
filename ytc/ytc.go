@@ -49,6 +49,9 @@ func main() {
 			}
 			logger = log.NewLogger(os.Stderr)
 			ctx = logr.NewContext(ctx, logger)
+			if err := config.LoadConfig(); err != nil {
+				return ctx, err
+			}
 			return ctx, nil
 		},
 		After: func(ctx context.Context, c *cli.Command) error {

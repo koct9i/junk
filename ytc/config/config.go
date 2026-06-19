@@ -11,13 +11,22 @@ import (
 )
 
 var (
-	Config    = ytsdk.Config{}
-	TokenPath string
-	Format    string
+	Config      = ytsdk.Config{}
+	ProfileName string
+	TokenPath   string
+	Format      string
+
+	EnableProxyDiscovery *bool
 )
 
 func Flags() []cli.Flag {
 	return []cli.Flag{
+		&cli.StringFlag{
+			Name:        "profile",
+			Usage:       "Name of configuration profile",
+			Sources:     cli.EnvVars("YT_CONFIG_PROFILE"),
+			Destination: &ProfileName,
+		},
 		&cli.StringFlag{
 			Name:        "proxy",
 			Usage:       "YT HTTP proxy; defaults to YT_PROXY when empty",
@@ -29,23 +38,14 @@ func Flags() []cli.Flag {
 			Usage:       "Path to a file with user token",
 			Sources:     cli.EnvVars("YT_TOKEN_PATH"),
 			Destination: &TokenPath,
-			Action: func(ctx context.Context, c *cli.Command, s string) error {
-				token, err := os.ReadFile(TokenPath)
-				if err != nil {
-					return err
-				}
-				Config.Token = strings.TrimSpace(string(token))
-				return nil
-			},
 		},
 		&cli.BoolWithInverseFlag{
 			Name:    "discover-proxy",
 			Aliases: []string{"use-hosts"},
 			Usage:   "Enable proxy discovery",
 			Sources: cli.EnvVars("YT_USE_HOSTS"),
-			Value:   true,
 			Action: func(ctx context.Context, c *cli.Command, enable bool) error {
-				Config.DisableProxyDiscovery = !enable
+				EnableProxyDiscovery = &enable
 				return nil
 			},
 		},
@@ -57,4 +57,40 @@ func Flags() []cli.Flag {
 			Destination: &Format,
 		},
 	}
+}
+
+func LoadConfig() error {
+	profile, err := LoadProfile(ProfileName)
+	if err != nil {
+		return err
+	}
+	if Config.Token == "" && profile.Token != "" {
+		Config.Token = profile.Token
+	}
+	if TokenPath == "" && profile.TokenPath != "" {
+		TokenPath = profile.TokenPath
+	}
+	if Config.Proxy == "" && profile.Proxy.URL != "" {
+		Config.Proxy = profile.Proxy.URL
+	}
+	if EnableProxyDiscovery != nil {
+		Config.DisableProxyDiscovery = !*EnableProxyDiscovery
+	} else if profile.Proxy.EnableProxyDiscovery != nil {
+		Config.DisableProxyDiscovery = !*profile.Proxy.EnableProxyDiscovery
+	}
+	if TokenPath != "" {
+		if strings.HasPrefix(TokenPath, "~/") {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			TokenPath = homeDir + TokenPath[1:]
+		}
+		token, err := os.ReadFile(TokenPath)
+		if err != nil {
+			return err
+		}
+		Config.Token = strings.TrimSpace(string(token))
+	}
+	return nil
 }
