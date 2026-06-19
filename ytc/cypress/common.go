@@ -1,57 +1,32 @@
 package cypress
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
-	"github.com/urfave/cli/v3"
+	"github.com/go-logr/logr"
+	"gopkg.in/yaml.v3"
+
 	"go.ytsaurus.tech/yt/go/yson"
 	ytsdk "go.ytsaurus.tech/yt/go/yt"
 	"go.ytsaurus.tech/yt/go/yt/ythttp"
-	"gopkg.in/yaml.v3"
+
+	"github.com/koct9i/junk/ytc/config"
+	"github.com/koct9i/junk/ytc/log"
 )
 
-var (
-	proxy  string
-	format string
-)
-
-// Commands returns the minimal Cypress command set.
-func Commands() []*cli.Command {
-	return []*cli.Command{
-		getCommand(),
-		setCommand(),
-		listCommand(),
-	}
-}
-
-func flags() []cli.Flag {
-	return []cli.Flag{
-		&cli.StringFlag{
-			Name:        "proxy",
-			Usage:       "YT HTTP proxy; defaults to YT_PROXY when empty",
-			Sources:     cli.EnvVars("YT_PROXY"),
-			Destination: &proxy,
-		},
-		&cli.StringFlag{
-			Name:        "format",
-			Aliases:     []string{"f"},
-			Usage:       "data format: json, yson, or yaml",
-			Value:       "json",
-			Destination: &format,
-		},
-	}
-}
-
-func client() (ytsdk.Client, error) {
-	return ythttp.NewClient(&ytsdk.Config{Proxy: proxy})
+func client(ctx context.Context) (ytsdk.Client, error) {
+	config := config.Config
+	config.Logger = log.NewYTSlog(logr.FromContextAsSlogLogger(ctx))
+	return ythttp.NewClient(&config)
 }
 
 func printValue(w io.Writer, v any) error {
-	switch normalizedFormat() {
+	switch config.Format {
 	case "json":
 		encoder := json.NewEncoder(w)
 		encoder.SetIndent("", "  ")
@@ -71,7 +46,7 @@ func printValue(w io.Writer, v any) error {
 		_, err = w.Write(data)
 		return err
 	default:
-		return fmt.Errorf("unsupported format %q", format)
+		return fmt.Errorf("unsupported format %q", config.Format)
 	}
 }
 
@@ -79,7 +54,7 @@ func parseValue(s string) (any, error) {
 	var value any
 	s = strings.TrimSpace(s)
 
-	switch normalizedFormat() {
+	switch config.Format {
 	case "json":
 		if err := json.Unmarshal([]byte(s), &value); err != nil {
 			return s, nil
@@ -95,7 +70,7 @@ func parseValue(s string) (any, error) {
 		}
 		return foldYSONAttributes(value)
 	default:
-		return nil, fmt.Errorf("unsupported format %q", format)
+		return nil, fmt.Errorf("unsupported format %q", config.Format)
 	}
 
 	return value, nil
@@ -212,8 +187,4 @@ func readValue(values []string) (any, error) {
 		return nil, err
 	}
 	return parseValue(string(data))
-}
-
-func normalizedFormat() string {
-	return strings.ToLower(strings.TrimSpace(format))
 }

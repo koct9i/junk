@@ -7,7 +7,7 @@ import (
 	"go.ytsaurus.tech/yt/go/ypath"
 )
 
-func setCommand() *cli.Command {
+func Set() *cli.Command {
 	return &cli.Command{
 		Name:  "set",
 		Usage: "set Cypress node value from argument or stdin",
@@ -15,9 +15,8 @@ func setCommand() *cli.Command {
 			&cli.StringArgs{Name: "path", Min: 1, Max: 1},
 			&cli.StringArgs{Name: "value", Min: 0, Max: 1},
 		},
-		Flags: flags(),
 		Action: func(ctx context.Context, c *cli.Command) error {
-			yc, err := client()
+			yc, err := client(ctx)
 			if err != nil {
 				return err
 			}

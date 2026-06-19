@@ -11,6 +11,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/koct9i/junk/ytc/config"
 	"github.com/koct9i/junk/ytc/cypress"
 	"github.com/koct9i/junk/ytc/log"
 )
@@ -25,7 +26,7 @@ func main() {
 	var ctxCancel func()
 
 	command := cli.Command{
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.IntFlag{
 				Name:        "log-verbosity",
 				Aliases:     []string{"v"},
@@ -41,12 +42,12 @@ func main() {
 				Aliases:     []string{"t"},
 				Destination: &timeout,
 			},
-		},
+		}, config.Flags()...),
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			if timeout > 0 {
 				ctx, ctxCancel = context.WithTimeout(ctx, timeout)
 			}
-			logger = log.NewLogger(os.Stdout)
+			logger = log.NewLogger(os.Stderr)
 			ctx = logr.NewContext(ctx, logger)
 			return ctx, nil
 		},
@@ -56,7 +57,11 @@ func main() {
 			}
 			return nil
 		},
-		Commands: cypress.Commands(),
+		Commands: []*cli.Command{
+			cypress.Get(),
+			cypress.Set(),
+			cypress.List(),
+		},
 	}
 	args := append(strings.Split(os.Args[0], "__"), os.Args[1:]...)
 	if err := command.Run(ctx, args); err != nil {

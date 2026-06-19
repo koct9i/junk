@@ -8,16 +8,15 @@ import (
 	"go.ytsaurus.tech/yt/go/ypath"
 )
 
-func getCommand() *cli.Command {
+func Get() *cli.Command {
 	return &cli.Command{
 		Name:  "get",
 		Usage: "get Cypress node value",
 		Arguments: []cli.Argument{
 			&cli.StringArgs{Name: "path", Min: 1, Max: 1},
 		},
-		Flags: flags(),
 		Action: func(ctx context.Context, c *cli.Command) error {
-			yc, err := client()
+			yc, err := client(ctx)
 			if err != nil {
 				return err
 			}

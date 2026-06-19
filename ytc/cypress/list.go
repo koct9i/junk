@@ -8,16 +8,15 @@ import (
 	"go.ytsaurus.tech/yt/go/ypath"
 )
 
-func listCommand() *cli.Command {
+func List() *cli.Command {
 	return &cli.Command{
 		Name:  "list",
 		Usage: "list Cypress directory children",
 		Arguments: []cli.Argument{
 			&cli.StringArgs{Name: "path", Min: 1, Max: 1},
 		},
-		Flags: flags(),
 		Action: func(ctx context.Context, c *cli.Command) error {
-			yc, err := client()
+			yc, err := client(ctx)
 			if err != nil {
 				return err
 			}
