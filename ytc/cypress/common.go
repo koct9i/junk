@@ -41,12 +41,12 @@ func parseValue(s string) (any, error) {
 	var value any
 	s = strings.TrimSpace(s)
 	if err := format.NewDecoder(strings.NewReader(s)).Decode(&value); err != nil {
-		if format == dataformat.JSON {
+		if format.Name() == dataformat.JSON.Name() {
 			return s, nil
 		}
 		return nil, err
 	}
-	if format == dataformat.YSON {
+	if format.Name() == dataformat.YSON.Name() {
 		return value, nil
 	}
 	return foldYSONAttributes(value)
