@@ -2,20 +2,19 @@ package cypress
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/go-logr/logr"
-	"gopkg.in/yaml.v3"
 
 	"go.ytsaurus.tech/yt/go/yson"
 	ytsdk "go.ytsaurus.tech/yt/go/yt"
 	"go.ytsaurus.tech/yt/go/yt/ythttp"
 
 	"github.com/koct9i/junk/ytc/config"
+	dataformat "github.com/koct9i/junk/ytc/format"
 	"github.com/koct9i/junk/ytc/log"
 )
 
@@ -26,54 +25,31 @@ func client(ctx context.Context) (ytsdk.Client, error) {
 }
 
 func printValue(w io.Writer, v any) error {
-	switch config.Format {
-	case "json":
-		encoder := json.NewEncoder(w)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(v)
-	case "yson":
-		data, err := yson.MarshalFormat(v, yson.FormatPretty)
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(w, string(data))
+	format, err := dataformat.Parse(config.Format)
+	if err != nil {
 		return err
-	case "yaml", "yml":
-		data, err := yaml.Marshal(v)
-		if err != nil {
-			return err
-		}
-		_, err = w.Write(data)
-		return err
-	default:
-		return fmt.Errorf("unsupported format %q", config.Format)
 	}
+	return format.NewEncoder(w).Encode(v)
 }
 
 func parseValue(s string) (any, error) {
-	var value any
-	s = strings.TrimSpace(s)
-
-	switch config.Format {
-	case "json":
-		if err := json.Unmarshal([]byte(s), &value); err != nil {
-			return s, nil
-		}
-		return foldYSONAttributes(value)
-	case "yson":
-		if err := yson.Unmarshal([]byte(s), &value); err != nil {
-			return nil, err
-		}
-	case "yaml", "yml":
-		if err := yaml.Unmarshal([]byte(s), &value); err != nil {
-			return nil, err
-		}
-		return foldYSONAttributes(value)
-	default:
-		return nil, fmt.Errorf("unsupported format %q", config.Format)
+	format, err := dataformat.Parse(config.Format)
+	if err != nil {
+		return nil, err
 	}
 
-	return value, nil
+	var value any
+	s = strings.TrimSpace(s)
+	if err := format.NewDecoder(strings.NewReader(s)).Decode(&value); err != nil {
+		if format == dataformat.JSON {
+			return s, nil
+		}
+		return nil, err
+	}
+	if format == dataformat.YSON {
+		return value, nil
+	}
+	return foldYSONAttributes(value)
 }
 
 func foldYSONAttributes(value any) (any, error) {
